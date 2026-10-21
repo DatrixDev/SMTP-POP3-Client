@@ -53,7 +53,6 @@ public final class Pop3Panel extends JPanel {
         detailHeading.setOpaque(false);
         detailHeading.add(MailStyles.title("Nội dung email"), BorderLayout.WEST);
         detailHeading.add(status, BorderLayout.EAST);
-        messageCard.add(detailHeading, BorderLayout.NORTH);
 
         JPanel metadata = new JPanel();
         metadata.setOpaque(false);
@@ -68,7 +67,6 @@ public final class Pop3Panel extends JPanel {
         metadata.add(recipient);
         metadata.add(Box.createVerticalStrut(6));
         metadata.add(date);
-        messageCard.add(metadata, BorderLayout.BEFORE_FIRST_LINE);
 
         body.setEditable(false);
         body.setLineWrap(true);
