@@ -34,7 +34,33 @@ mvn exec:java
 
 In the UI enter your email, app password, SMTP and POP3 host/port. Defaults are Gmail SMTP 587 STARTTLS and POP3 995 SSL. Sending and receiving use live provider servers; no simulation.
 
-## Optional MySQL 8+
+## MySQL 8.4 with Docker (recommended)
+
+From the repository root, copy the environment template, then edit the two passwords in `.env`:
+
+```powershell
+Copy-Item .env.example .env
+docker compose up -d
+docker compose ps
+```
+
+The MySQL container is published on `127.0.0.1:3307` (configurable using `MYSQL_PORT` in `.env`). The database schema in `database/schema.sql` is imported automatically **only when the database volume is initialized for the first time**. To apply later schema changes, run SQL migrations; don't delete the volume unless you intend to lose data.
+
+For the Java application launched on the Windows host, set environment variables in the same PowerShell session:
+
+```powershell
+$env:MAIL_DB_URL="jdbc:mysql://127.0.0.1:3307/smtp_pop3_client?useUnicode=true&characterEncoding=UTF-8"
+$env:MAIL_DB_USER="mailapp"
+$env:MAIL_DB_PASSWORD="YOUR_MYSQL_PASSWORD_FROM_DOT_ENV"
+cd client
+mvn exec:java
+```
+
+If you change `MYSQL_PORT`, update the JDBC URL accordingly. Do not put mail credentials in `.env`; the MySQL password is separate from the email app password.
+
+To stop the container without deleting data: `docker compose down`. To inspect logs: `docker compose logs -f mysql`.
+
+## Optional MySQL 8+ (without Docker)
 
 Run `database/schema.sql` in MySQL Workbench, then configure environment variables before starting the app:
 
