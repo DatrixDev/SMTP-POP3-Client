@@ -4,6 +4,7 @@ import java.awt.*;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import vn.edu.mailclient.common.MailAccount;
+import vn.edu.mailclient.client.config.MailConfig;
 
 public final class MainFrame extends JFrame {
     private final JTextField email = new JTextField();
@@ -48,7 +49,19 @@ public final class MainFrame extends JFrame {
         content.add(workspace, BorderLayout.CENTER);
         root.add(content, BorderLayout.CENTER);
         root.add(statusBar(), BorderLayout.SOUTH);
-        navigate("inbox");
+        loadSavedConfig();
+        navigate(email.getText().isBlank() || password.getPassword().length == 0 ? "settings" : "inbox");
+    }
+
+    private void loadSavedConfig() {
+        MailConfig config = MailConfig.load();
+        email.setText(config.email());
+        password.setText(config.password());
+        smtpHost.setText(config.smtpHost());
+        smtpPort.setText(String.valueOf(config.smtpPort()));
+        popHost.setText(config.popHost());
+        popPort.setText(String.valueOf(config.popPort()));
+        if (!config.email().isBlank() && !config.password().isBlank()) identity.setText(config.email());
     }
 
     private JComponent header() {
@@ -142,7 +155,7 @@ public final class MainFrame extends JFrame {
         JPanel heading = new JPanel(new BorderLayout());
         heading.setOpaque(false);
         heading.add(MailStyles.title("Cấu hình tài khoản & Mail Server"), BorderLayout.NORTH);
-        heading.add(MailStyles.muted("Sử dụng SMTP / POP3 của Gmail hoặc dịch vụ mail khác. Không lưu mật khẩu."), BorderLayout.SOUTH);
+        heading.add(MailStyles.muted("Tự nạp cấu hình từ .env hoặc biến môi trường khi khởi động. Không lưu mật khẩu vào database."), BorderLayout.SOUTH);
         wrapper.add(heading, BorderLayout.NORTH);
 
         JPanel card = MailStyles.card(new BorderLayout(0, 18));
