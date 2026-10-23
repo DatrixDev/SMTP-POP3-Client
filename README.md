@@ -81,3 +81,20 @@ When `MAIL_DB_URL` is absent, the app still sends and receives mail, without a l
 - POP3 may be unavailable for certain providers/accounts. If a provider disallows password-based login, OAuth2 would need to be implemented separately.
 
 Never commit app passwords, tokens, or database credentials.
+
+
+## LAN UDP mail (experimental)
+
+The project now includes a `server` Maven module and a JavaFX **Mail nội bộ LAN** page. SMTP and POP3 remain independent; IMAP is optional.
+
+1. Copy `.env.example` to `.env`, fill in Docker MySQL credentials and Gmail App Password. Ensure `MAIL_DB_URL` uses the same published port as `MYSQL_PORT`. Do not commit `.env`.
+2. Run `docker compose up -d` from the repository root.
+3. Run `mvn clean install` from the repository root.
+4. In terminal A, run `cd server` then `mvn exec:java`. The server initializes `lan_users` and `lan_messages` in MySQL.
+5. In terminal B, run `cd client` then `mvn exec:java`.
+6. In JavaFX select **Mail nội bộ LAN**; register two different usernames, log in and exchange messages. Use another client instance to test the recipient.
+7. For two computers on a trusted private LAN, set `LAN_BIND=0.0.0.0` in the server's `.env`, allow UDP port 2023 in the firewall, and set the client Server IP to the server computer's private IPv4 address.
+
+**Important security limitation:** The UDP LAN mode is a course demonstration, not an Internet mail server. Its traffic, including login passwords, is **not encrypted**. Do not reuse real passwords, expose UDP port 2023 to the public Internet, or deploy on an untrusted network. Gmail App Password is used only by SMTP/POP3/IMAP clients and is not transmitted to the LAN server.
+
+The `ImapService.sinceUid(...)` API supports incremental reads by UID, but persistent cursor storage, scheduled polling, HTML WebView rendering and attachments are not yet wired into the desktop UI. Manual IMAP refresh remains available.
