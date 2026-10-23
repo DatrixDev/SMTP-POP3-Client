@@ -18,6 +18,7 @@ import vn.edu.mailclient.common.MailAccount;
 import vn.edu.mailclient.common.MailItem;
 import vn.edu.mailclient.service.MailDatabase;
 import vn.edu.mailclient.service.Pop3Service;
+import vn.edu.mailclient.service.ImapService;
 import vn.edu.mailclient.service.SmtpService;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -45,6 +46,7 @@ public final class MailFxApp extends Application {
     private Button inboxNav, composeNav, settingsNav;
     private Stage stage;
     private int inboxOffset = 0;
+    private final ComboBox<String> receiveMode = new ComboBox<>(FXCollections.observableArrayList("POP3 (bài lab)", "IMAP (thư mới)"));
     private static final int PAGE_SIZE = 20;
     private final Label pageLabel = new Label("Trang 1");
 
@@ -131,6 +133,8 @@ public final class MailFxApp extends Application {
 
     private Pane inboxPage() {
         VBox wrapper = page("Hộp thư đến", "Đọc thư trực tiếp từ Gmail qua giao thức POP3");
+        receiveMode.getSelectionModel().selectFirst();
+        receiveMode.setOnAction(e -> { inboxOffset = 0; inboxCount.setText("Nhấn Làm mới để tải thư qua " + receiveMode.getValue()); });
         Button refresh = primary("↻  Làm mới");
         Button previous = new Button("‹ Trước");
         Button next = new Button("Tiếp ›");
@@ -140,7 +144,7 @@ public final class MailFxApp extends Application {
         pageLabel.setText("Trang " + (inboxOffset / PAGE_SIZE + 1));
         HBox paging = new HBox(9, previous, pageLabel, next);
         paging.setAlignment(Pos.CENTER_RIGHT);
-        HBox heading = new HBox(20, wrapper, new Region(), refresh);
+        HBox heading = new HBox(20, wrapper, new Region(), receiveMode, refresh);
         HBox.setHgrow(heading.getChildren().get(1), Priority.ALWAYS);
         heading.setAlignment(Pos.CENTER_LEFT); heading.setPadding(new Insets(0, 22, 0, 0));
 
@@ -206,10 +210,13 @@ public final class MailFxApp extends Application {
     private void refreshInbox(Button refresh) {
         final MailAccount acc;
         try { acc = account(); } catch (Exception ex) { error(ex); return; }
-        refresh.setDisable(true); status.setText("Đang tải email từ POP3...");
+        boolean imap = receiveMode.getValue() != null && receiveMode.getValue().startsWith("IMAP");
+        int offset = inboxOffset;
+        refresh.setDisable(true); status.setText("Đang tải email từ " + (imap ? "IMAP" : "POP3") + "...");
         Task<List<MailItem>> task = new Task<>() {
             @Override protected List<MailItem> call() throws Exception {
-                List<MailItem> items = new Pop3Service().inbox(acc, inboxOffset, PAGE_SIZE);
+                List<MailItem> items = imap ? new ImapService().inbox(acc, offset, PAGE_SIZE)
+                                            : new Pop3Service().inbox(acc, offset, PAGE_SIZE);
                 MailDatabase db = new MailDatabase();
                 if (db.enabled()) {
                     for (MailItem item : items) {
@@ -224,7 +231,7 @@ public final class MailFxApp extends Application {
             refresh.setDisable(false);
             List<MailItem> items = task.getValue();
             mailList.setItems(FXCollections.observableArrayList(items));
-            inboxCount.setText("Đã tải " + items.size() + " email từ POP3");
+            inboxCount.setText("Đã tải " + items.size() + " email từ " + (imap ? "IMAP" : "POP3"));
             pageLabel.setText("Trang " + (inboxOffset / PAGE_SIZE + 1));
             status.setText("Đã cập nhật hộp thư");
             if (!items.isEmpty()) mailList.getSelectionModel().selectFirst();
