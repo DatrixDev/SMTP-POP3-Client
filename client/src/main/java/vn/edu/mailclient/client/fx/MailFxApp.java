@@ -303,7 +303,6 @@ public final class MailFxApp extends Application {
         Button register = primary("Đăng ký"), login = primary("Đăng nhập");
         Button send = primary("Gửi LAN"), inbox = primary("Hộp thư đến");
         Button sent = primary("Đã gửi"), contacts = primary("Danh bạ / Online");
-        Runnable[] ignored = {};
         register.setOnAction(e -> lanAction(output, () -> new LanClient(host.getText().trim(), Integer.parseInt(port.getText().trim()))
             .register(username.getText(), pwd.getText()), value -> output.setText("Đăng ký thành công. Hãy đăng nhập.")));
         login.setOnAction(e -> lanAction(output, () -> new LanClient(host.getText().trim(), Integer.parseInt(port.getText().trim()))
