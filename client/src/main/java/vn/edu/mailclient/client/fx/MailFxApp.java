@@ -2,6 +2,10 @@ package vn.edu.mailclient.client.fx;
 
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
+import javafx.util.Duration;
+import java.util.prefs.Preferences;
 import javafx.collections.FXCollections;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
@@ -48,6 +52,9 @@ public final class MailFxApp extends Application {
     private String lanToken;
     private String lanUser;
     private Stage stage;
+    private final Preferences syncState = Preferences.userNodeForPackage(MailFxApp.class);
+    private Timeline imapPolling;
+    private boolean imapSyncBusy = false;
     private int inboxOffset = 0;
     private final ComboBox<String> receiveMode = new ComboBox<>(FXCollections.observableArrayList("POP3 (bài lab)", "IMAP (thư mới)"));
     private static final int PAGE_SIZE = 20;
@@ -71,6 +78,9 @@ public final class MailFxApp extends Application {
         stage.setTitle("SMTP / POP3 Mail • JavaFX");
         showPage(cfg.email().isBlank() || cfg.password().isBlank() ? "settings" : "inbox");
         stage.show();
+        imapPolling = new Timeline(new KeyFrame(Duration.seconds(45), e -> pollImap()));
+        imapPolling.setCycleCount(Timeline.INDEFINITE);
+        imapPolling.play();
     }
 
     private HBox header() {
@@ -243,6 +253,42 @@ public final class MailFxApp extends Application {
             if (!items.isEmpty()) mailList.getSelectionModel().selectFirst();
         });
         task.setOnFailed(e -> { refresh.setDisable(false); status.setText("Tải email thất bại"); error(task.getException()); });
+        workers.submit(task);
+    }
+
+    /** Background IMAP UID polling; keeps the POP3 lab path untouched. */
+    private void pollImap() {
+        if (imapSyncBusy || receiveMode.getValue() == null || !receiveMode.getValue().startsWith("IMAP")) return;
+        if (root.getCenter() == null || !root.getCenter().getClass().equals(VBox.class)) return;
+        final MailAccount acc;
+        try { acc = account(); } catch (Exception ignored) { return; }
+        final String key = "imap.uid." + acc.email().toLowerCase(java.util.Locale.ROOT);
+        final long previous = syncState.getLong(key, 0L);
+        imapSyncBusy = true;
+        Task<ImapService.SyncBatch> task = new Task<>() {
+            @Override protected ImapService.SyncBatch call() throws Exception {
+                return new ImapService().sinceUid(acc, previous, 100);
+            }
+        };
+        task.setOnSucceeded(e -> {
+            imapSyncBusy = false;
+            ImapService.SyncBatch batch = task.getValue();
+            if (batch.lastUid() > previous) syncState.putLong(key, batch.lastUid());
+            if (!batch.messages().isEmpty()) {
+                status.setText("IMAP: có " + batch.messages().size() + " thư mới");
+                if (inboxOffset == 0) {
+                    java.util.List<MailItem> updated = new java.util.ArrayList<>(batch.messages());
+                    java.util.Collections.reverse(updated);
+                    java.util.Set<String> ids = new java.util.HashSet<>();
+                    for (MailItem item : updated) ids.add(item.messageId());
+                    for (MailItem item : mailList.getItems()) {
+                        if (!ids.contains(item.messageId())) updated.add(item);
+                    }
+                    mailList.setItems(FXCollections.observableArrayList(updated.subList(0, Math.min(PAGE_SIZE, updated.size()))));
+                }
+            }
+        });
+        task.setOnFailed(e -> { imapSyncBusy = false; status.setText("IMAP: đồng bộ thất bại: " + task.getException().getMessage()); });
         workers.submit(task);
     }
 
@@ -437,5 +483,5 @@ public final class MailFxApp extends Application {
         new Alert(Alert.AlertType.ERROR, cause.getMessage() == null ? cause.toString() : cause.getMessage()).showAndWait();
     }
 
-    @Override public void stop() { workers.shutdownNow(); }
+    @Override public void stop() { if (imapPolling != null) imapPolling.stop(); workers.shutdownNow(); }
 }
