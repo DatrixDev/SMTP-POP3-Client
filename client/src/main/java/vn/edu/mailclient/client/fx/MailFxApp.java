@@ -44,6 +44,9 @@ public final class MailFxApp extends Application {
     private final PasswordField password = new PasswordField();
     private Button inboxNav, composeNav, settingsNav;
     private Stage stage;
+    private int inboxOffset = 0;
+    private static final int PAGE_SIZE = 20;
+    private final Label pageLabel = new Label("Trang 1");
 
     @Override public void start(Stage primaryStage) {
         stage = primaryStage;
@@ -129,7 +132,14 @@ public final class MailFxApp extends Application {
     private Pane inboxPage() {
         VBox wrapper = page("Hộp thư đến", "Đọc thư trực tiếp từ Gmail qua giao thức POP3");
         Button refresh = primary("↻  Làm mới");
-        refresh.setOnAction(e -> refreshInbox(refresh));
+        Button previous = new Button("‹ Trước");
+        Button next = new Button("Tiếp ›");
+        previous.setOnAction(e -> { inboxOffset = Math.max(0, inboxOffset - PAGE_SIZE); refreshInbox(refresh); });
+        next.setOnAction(e -> { inboxOffset += PAGE_SIZE; refreshInbox(refresh); });
+        refresh.setOnAction(e -> { inboxOffset = 0; refreshInbox(refresh); });
+        pageLabel.setText("Trang " + (inboxOffset / PAGE_SIZE + 1));
+        HBox paging = new HBox(9, previous, pageLabel, next);
+        paging.setAlignment(Pos.CENTER_RIGHT);
         HBox heading = new HBox(20, wrapper, new Region(), refresh);
         HBox.setHgrow(heading.getChildren().get(1), Priority.ALWAYS);
         heading.setAlignment(Pos.CENTER_LEFT); heading.setPadding(new Insets(0, 22, 0, 0));
@@ -146,6 +156,9 @@ public final class MailFxApp extends Application {
                 subject.setTextFill(Color.web("#356bb5"));
                 Label date = new Label(item.sentAt()); date.setTextFill(Color.web("#8290a3"));
                 VBox vbox = new VBox(5, from, subject, date);
+                vbox.setMinWidth(0);
+                // Bind labels to the actual cell width so long sender names do not cause horizontal scrolling.
+                vbox.prefWidthProperty().bind(widthProperty().subtract(24));
                 for (Label l : new Label[]{from, subject, date}) {
                     l.setMaxWidth(Double.MAX_VALUE); l.setTextOverrun(OverrunStyle.ELLIPSIS);
                 }
@@ -153,7 +166,8 @@ public final class MailFxApp extends Application {
                 setGraphic(vbox); setText(null);
             }
         });
-        VBox left = new VBox(12, listTitle, inboxCount, mailList);
+        VBox left = new VBox(12, listTitle, inboxCount, mailList, paging);
+        left.setMinWidth(0);
         left.setPadding(new Insets(22)); left.setStyle(cardStyle());
         VBox.setVgrow(mailList, Priority.ALWAYS);
 
@@ -165,6 +179,12 @@ public final class MailFxApp extends Application {
         VBox right = new VBox(13, detailTitle, new Separator(), detailSubject, detailFrom, detailTo,
                 detailDate, new Separator(), detailBody);
         right.setPadding(new Insets(22)); right.setStyle(cardStyle());
+        right.setMinWidth(0);
+        for (Label label : new Label[]{detailFrom, detailTo, detailDate}) {
+            label.setWrapText(true);
+            label.setMaxWidth(Double.MAX_VALUE);
+        }
+        detailSubject.setMaxWidth(Double.MAX_VALUE);
         VBox.setVgrow(detailBody, Priority.ALWAYS);
         mailList.getSelectionModel().selectedItemProperty().addListener((obs, old, item) -> {
             if (item == null) return;
@@ -175,6 +195,7 @@ public final class MailFxApp extends Application {
             detailBody.setText(item.body()); detailBody.positionCaret(0);
         });
         SplitPane split = new SplitPane(left, right);
+        split.setMinWidth(0);
         split.setDividerPositions(0.38); split.setStyle("-fx-background-color: transparent;");
         VBox.setVgrow(split, Priority.ALWAYS);
         VBox content = new VBox(0, heading, split);
@@ -188,7 +209,7 @@ public final class MailFxApp extends Application {
         refresh.setDisable(true); status.setText("Đang tải email từ POP3...");
         Task<List<MailItem>> task = new Task<>() {
             @Override protected List<MailItem> call() throws Exception {
-                List<MailItem> items = new Pop3Service().inbox(acc);
+                List<MailItem> items = new Pop3Service().inbox(acc, inboxOffset, PAGE_SIZE);
                 MailDatabase db = new MailDatabase();
                 if (db.enabled()) {
                     for (MailItem item : items) {
@@ -204,6 +225,7 @@ public final class MailFxApp extends Application {
             List<MailItem> items = task.getValue();
             mailList.setItems(FXCollections.observableArrayList(items));
             inboxCount.setText("Đã tải " + items.size() + " email từ POP3");
+            pageLabel.setText("Trang " + (inboxOffset / PAGE_SIZE + 1));
             status.setText("Đã cập nhật hộp thư");
             if (!items.isEmpty()) mailList.getSelectionModel().selectFirst();
         });
