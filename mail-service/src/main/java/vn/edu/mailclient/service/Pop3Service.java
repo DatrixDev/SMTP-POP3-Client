@@ -4,12 +4,19 @@ import java.io.IOException;
 import java.util.*;
 import javax.mail.*;
 import javax.mail.internet.MimeMultipart;
+import javax.mail.internet.MimeUtility;
+import javax.mail.internet.InternetAddress;
 import vn.edu.mailclient.common.MailAccount;
 import vn.edu.mailclient.common.MailItem;
 
 /** JavaMail POP3 Store/Folder/Message based on textbook Listing 7.4. */
 public final class Pop3Service {
     public List<MailItem> inbox(MailAccount account) throws MessagingException, IOException {
+        return inbox(account, 0, 20);
+    }
+
+    /** Page through the messages exposed by POP3, ordered by POP3 message number. */
+    public List<MailItem> inbox(MailAccount account, int offset, int pageSize) throws MessagingException, IOException {
         Properties props = new Properties();
         props.put("mail.pop3s.ssl.enable", "true");
         props.put("mail.pop3s.connectiontimeout", "10000");
@@ -24,8 +31,9 @@ public final class Pop3Service {
             try {
                 Message[] messages = folder.getMessages();
                 List<MailItem> items = new ArrayList<>();
-                // Download only the newest 20 messages to avoid loading an entire mailbox.
-                for (int i = messages.length - 1; i >= Math.max(0, messages.length - 20); i--) {
+                int start = messages.length - 1 - Math.max(0, offset);
+                int end = Math.max(0, start - Math.max(1, Math.min(50, pageSize)) + 1);
+                for (int i = start; i >= end; i--) {
                     Message m = messages[i];
                     String mid = "";
                     if (m instanceof javax.mail.internet.MimeMessage mm) {
@@ -35,7 +43,7 @@ public final class Pop3Service {
                     items.add(new MailItem(m.getMessageNumber(), mid,
                             m.getFrom() == null ? "" : InternetAddresses(m.getFrom()),
                             m.getAllRecipients() == null ? "" : InternetAddresses(m.getAllRecipients()),
-                            Objects.toString(m.getSubject(), ""), extractText(m),
+                            decode(Objects.toString(m.getSubject(), "")), extractText(m),
                             m.getSentDate() == null ? "" : m.getSentDate().toString()));
                 }
                 return items;
@@ -46,9 +54,20 @@ public final class Pop3Service {
     }
     private static String InternetAddresses(Address[] a) {
         StringJoiner join = new StringJoiner(", ");
-        for (Address item : a) join.add(item.toString());
+        for (Address item : a) {
+            if (item instanceof InternetAddress ia) {
+                String personal = ia.getPersonal();
+                if (personal == null || personal.isBlank()) join.add(ia.getAddress());
+                else join.add(decode(personal) + " <" + ia.getAddress() + ">");
+            } else join.add(decode(item.toString()));
+        }
         return join.toString();
     }
+    private static String decode(String value) {
+        try { return MimeUtility.decodeText(value); }
+        catch (Exception ex) { return value; }
+    }
+
     private static String extractText(Part part) throws MessagingException, IOException {
         if (part.isMimeType("text/plain")) return Objects.toString(part.getContent(), "");
         if (part.isMimeType("text/html")) return "[HTML email]\n" + Objects.toString(part.getContent(), "");
