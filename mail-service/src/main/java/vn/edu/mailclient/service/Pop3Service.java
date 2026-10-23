@@ -14,6 +14,7 @@ public final class Pop3Service {
         props.put("mail.pop3s.ssl.enable", "true");
         props.put("mail.pop3s.connectiontimeout", "10000");
         props.put("mail.pop3s.timeout", "20000");
+        props.put("mail.pop3s.writetimeout", "20000");
         Session session = Session.getInstance(props);
         try (StoreHolder holder = new StoreHolder(session.getStore("pop3s"))) {
             holder.store.connect(account.popHost(), account.popPort(), account.email(), account.password());
@@ -23,7 +24,8 @@ public final class Pop3Service {
             try {
                 Message[] messages = folder.getMessages();
                 List<MailItem> items = new ArrayList<>();
-                for (int i = messages.length - 1; i >= 0; i--) {
+                // Download only the newest 20 messages to avoid loading an entire mailbox.
+                for (int i = messages.length - 1; i >= Math.max(0, messages.length - 20); i--) {
                     Message m = messages[i];
                     String mid = "";
                     if (m instanceof javax.mail.internet.MimeMessage mm) {
