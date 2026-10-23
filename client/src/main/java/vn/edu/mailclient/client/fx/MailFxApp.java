@@ -19,6 +19,7 @@ import vn.edu.mailclient.common.MailItem;
 import vn.edu.mailclient.service.MailDatabase;
 import vn.edu.mailclient.service.Pop3Service;
 import vn.edu.mailclient.service.ImapService;
+import vn.edu.mailclient.client.lan.LanClient;
 import vn.edu.mailclient.service.SmtpService;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -43,7 +44,9 @@ public final class MailFxApp extends Application {
     private final TextField email = new TextField(), smtpHost = new TextField(), smtpPort = new TextField();
     private final TextField popHost = new TextField(), popPort = new TextField();
     private final PasswordField password = new PasswordField();
-    private Button inboxNav, composeNav, settingsNav;
+    private Button inboxNav, composeNav, settingsNav, lanNav;
+    private String lanToken;
+    private String lanUser;
     private Stage stage;
     private int inboxOffset = 0;
     private final ComboBox<String> receiveMode = new ComboBox<>(FXCollections.observableArrayList("POP3 (bài lab)", "IMAP (thư mới)"));
@@ -90,7 +93,8 @@ public final class MailFxApp extends Application {
         inboxNav = nav("▣   Hộp thư đến", "inbox");
         composeNav = nav("✎   Soạn thư mới", "compose");
         settingsNav = nav("⚙   Cấu hình server", "settings");
-        VBox side = new VBox(12, section, inboxNav, composeNav, settingsNav);
+        lanNav = nav("◉   Mail nội bộ LAN", "lan");
+        VBox side = new VBox(12, section, inboxNav, composeNav, lanNav, settingsNav);
         side.setPadding(new Insets(28, 14, 20, 14)); side.setPrefWidth(235);
         side.setStyle("-fx-background-color: #0c2b59;");
         return side;
@@ -109,10 +113,12 @@ public final class MailFxApp extends Application {
             highlight(inboxNav, page.equals("inbox"));
             highlight(composeNav, page.equals("compose"));
             highlight(settingsNav, page.equals("settings"));
+            highlight(lanNav, page.equals("lan"));
         }
         root.setCenter(switch (page) {
             case "compose" -> composePage();
             case "settings" -> settingsPage();
+            case "lan" -> lanPage();
             default -> inboxPage();
         });
     }
@@ -281,6 +287,83 @@ public final class MailFxApp extends Application {
         VBox outer = new VBox(18, page, card); outer.setPadding(new Insets(0, 28, 28, 28));
         VBox.setVgrow(card, Priority.ALWAYS);
         return outer;
+    }
+
+    private Pane lanPage() {
+        VBox outer = page("Mail nội bộ LAN", "Đăng ký, đăng nhập, gửi và nhận thư qua UDP Server + MySQL Docker");
+        TextField host = new TextField("127.0.0.1");
+        TextField port = new TextField("2023");
+        TextField username = new TextField(lanUser == null ? "" : lanUser);
+        PasswordField pwd = new PasswordField();
+        TextField receiver = new TextField(), subject = new TextField();
+        TextArea body = new TextArea(); body.setPrefRowCount(4);
+        TextArea output = new TextArea(); output.setEditable(false); output.setWrapText(true);
+        output.setPrefRowCount(12);
+        Label identity = new Label(lanUser == null ? "Chưa đăng nhập" : "Đã đăng nhập: " + lanUser);
+        Button register = primary("Đăng ký"), login = primary("Đăng nhập");
+        Button send = primary("Gửi LAN"), inbox = primary("Hộp thư đến");
+        Button sent = primary("Đã gửi"), contacts = primary("Danh bạ / Online");
+        Runnable[] ignored = {};
+        register.setOnAction(e -> lanAction(output, () -> new LanClient(host.getText().trim(), Integer.parseInt(port.getText().trim()))
+            .register(username.getText(), pwd.getText()), value -> output.setText("Đăng ký thành công. Hãy đăng nhập.")));
+        login.setOnAction(e -> lanAction(output, () -> new LanClient(host.getText().trim(), Integer.parseInt(port.getText().trim()))
+            .login(username.getText(), pwd.getText()), value -> {
+                lanToken = value.substring(3); lanUser = username.getText().trim().toLowerCase();
+                identity.setText("Đã đăng nhập: " + lanUser); output.setText("Đăng nhập thành công");
+            }));
+        send.setOnAction(e -> lanAction(output, () -> {
+            requireLanLogin();
+            return new LanClient(host.getText().trim(), Integer.parseInt(port.getText().trim()))
+                .send(lanToken, receiver.getText(), subject.getText(), body.getText());
+        }, value -> output.setText("Đã gửi thư LAN tới " + receiver.getText())));
+        inbox.setOnAction(e -> lanMailbox(output, host.getText(), port.getText(), "INBOX"));
+        sent.setOnAction(e -> lanMailbox(output, host.getText(), port.getText(), "SENT"));
+        contacts.setOnAction(e -> lanAction(output, () -> {
+            requireLanLogin();
+            LanClient client = new LanClient(host.getText().trim(), Integer.parseInt(port.getText().trim()));
+            String all = client.call("USERS", lanToken);
+            String online = client.call("ONLINE", lanToken);
+            return all + "\\t" + online;
+        }, value -> {
+            String[] parts = value.split("\\t",2);
+            StringBuilder b = new StringBuilder("DANH BẠ\\n");
+            for (String line : parts[0].split("\\n")) if (!line.equals("OK") && !line.isBlank()) b.append(LanClient.dec(line)).append("\\n");
+            b.append("\\nONLINE (hoạt động gần đây)\\n");
+            if(parts.length>1)for(String line:parts[1].split("\\n"))if(!line.equals("OK")&&!line.isBlank())b.append(LanClient.dec(line)).append("\\n");
+            output.setText(b.toString());
+        }));
+        GridPane fields = new GridPane(); fields.setHgap(10); fields.setVgap(8);
+        fields.addRow(0,new Label("Server IP"),host,new Label("UDP port"),port);
+        fields.addRow(1,new Label("Tên tài khoản"),username,new Label("Mật khẩu"),pwd);
+        HBox buttons = new HBox(10,register,login,identity);
+        HBox actions = new HBox(10,send,inbox,sent,contacts);
+        VBox card = new VBox(12,fields,buttons,new Separator(),new Label("Người nhận (username)"),receiver,
+            new Label("Tiêu đề"),subject,new Label("Nội dung"),body,actions,new Label("Kết quả"),output);
+        card.setPadding(new Insets(22));card.setStyle(cardStyle());
+        outer.getChildren().add(card);
+        ScrollPane scroll = new ScrollPane(outer);scroll.setFitToWidth(true);
+        return scroll;
+    }
+
+    @FunctionalInterface private interface LanCall { String run() throws Exception; }
+    private void requireLanLogin() {
+        if (lanToken == null) throw new IllegalStateException("Hãy đăng nhập LAN trước");
+    }
+    private void lanAction(TextArea output, LanCall action, java.util.function.Consumer<String> success) {
+        Task<String> task = new Task<>() { @Override protected String call() throws Exception { return action.run(); } };
+        task.setOnSucceeded(e -> success.accept(task.getValue()));
+        task.setOnFailed(e -> { output.setText("Lỗi: " + task.getException().getMessage()); });
+        workers.submit(task);
+    }
+    private void lanMailbox(TextArea output,String host,String port,String folder) {
+        lanAction(output, () -> {
+            requireLanLogin();
+            List<String[]> rows = new LanClient(host.trim(),Integer.parseInt(port.trim())).mailbox(lanToken,folder);
+            StringBuilder b = new StringBuilder(folder + " (" + rows.size() + " thư)\\n\\n");
+            for (String[] row : rows) b.append("#").append(row[0]).append(" | ").append(row[1]).append(" → ")
+                .append(row[2]).append("\\n").append(row[3]).append("\\n").append(row[4]).append("\\n----------\\n");
+            return b.toString();
+        },output::setText);
     }
 
     private Pane settingsPage() {
