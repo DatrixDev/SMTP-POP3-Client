@@ -387,7 +387,7 @@ public final class MailFxApp extends Application {
         card.setPadding(new Insets(22));card.setStyle(cardStyle());
         outer.getChildren().add(card);
         ScrollPane scroll = new ScrollPane(outer);scroll.setFitToWidth(true);
-        return scroll;
+        return new StackPane(scroll);
     }
 
     @FunctionalInterface private interface LanCall { String run() throws Exception; }
