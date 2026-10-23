@@ -322,13 +322,13 @@ public final class MailFxApp extends Application {
             LanClient client = new LanClient(host.getText().trim(), Integer.parseInt(port.getText().trim()));
             String all = client.call("USERS", lanToken);
             String online = client.call("ONLINE", lanToken);
-            return all + "\\t" + online;
+            return all + "\t" + online;
         }, value -> {
-            String[] parts = value.split("\\t",2);
-            StringBuilder b = new StringBuilder("DANH BẠ\\n");
-            for (String line : parts[0].split("\\n")) if (!line.equals("OK") && !line.isBlank()) b.append(LanClient.dec(line)).append("\\n");
-            b.append("\\nONLINE (hoạt động gần đây)\\n");
-            if(parts.length>1)for(String line:parts[1].split("\\n"))if(!line.equals("OK")&&!line.isBlank())b.append(LanClient.dec(line)).append("\\n");
+            String[] parts = value.split("\t",2);
+            StringBuilder b = new StringBuilder("DANH BẠ\n");
+            for (String line : parts[0].split("\n")) if (!line.equals("OK") && !line.isBlank()) b.append(LanClient.dec(line)).append("\n");
+            b.append("\nONLINE (hoạt động gần đây)\n");
+            if(parts.length>1)for(String line:parts[1].split("\n"))if(!line.equals("OK")&&!line.isBlank())b.append(LanClient.dec(line)).append("\n");
             output.setText(b.toString());
         }));
         GridPane fields = new GridPane(); fields.setHgap(10); fields.setVgap(8);
@@ -358,9 +358,9 @@ public final class MailFxApp extends Application {
         lanAction(output, () -> {
             requireLanLogin();
             List<String[]> rows = new LanClient(host.trim(),Integer.parseInt(port.trim())).mailbox(lanToken,folder);
-            StringBuilder b = new StringBuilder(folder + " (" + rows.size() + " thư)\\n\\n");
+            StringBuilder b = new StringBuilder(folder + " (" + rows.size() + " thư)\n\n");
             for (String[] row : rows) b.append("#").append(row[0]).append(" | ").append(row[1]).append(" → ")
-                .append(row[2]).append("\\n").append(row[3]).append("\\n").append(row[4]).append("\\n----------\\n");
+                .append(row[2]).append("\n").append(row[3]).append("\n").append(row[4]).append("\n----------\n");
             return b.toString();
         },output::setText);
     }
