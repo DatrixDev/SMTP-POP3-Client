@@ -51,6 +51,46 @@ public final class ImapService {
         }
     }
 
+    /** Incremental Gmail sync using IMAP UID; caller stores last UID between runs. */
+    public SyncBatch sinceUid(MailAccount account, long lastUid, int limit) throws MessagingException, IOException {
+        Properties p = new Properties();
+        p.put("mail.store.protocol", "imaps");
+        p.put("mail.imaps.ssl.enable", "true");
+        p.put("mail.imaps.connectiontimeout", "12000");
+        p.put("mail.imaps.timeout", "20000");
+        Store store = Session.getInstance(p).getStore("imaps");
+        Folder folder = null;
+        try {
+            store.connect("imap.gmail.com", account.email(), account.password().replaceAll("\\s", ""));
+            folder = store.getFolder("INBOX");
+            folder.open(Folder.READ_ONLY);
+            UIDFolder uids = (UIDFolder) folder;
+            long max = uids.getUIDNext() - 1;
+            long start = Math.max(1, Math.max(lastUid + 1, max - Math.max(1, Math.min(limit, 100)) + 1));
+            if (start > max) return new SyncBatch(lastUid, List.of());
+            Message[] messages = uids.getMessagesByUID(start, max);
+            List<MailItem> items = new ArrayList<>();
+            long cursor = lastUid;
+            for (Message m : messages) {
+                if (m == null) continue;
+                long uid = uids.getUID(m);
+                cursor = Math.max(cursor, uid);
+                Address[] from = m.getFrom();
+                Address[] to = m.getRecipients(Message.RecipientType.TO);
+                String[] ids = m.getHeader("Message-ID");
+                Date date = m.getReceivedDate() != null ? m.getReceivedDate() : m.getSentDate();
+                items.add(new MailItem(m.getMessageNumber(), ids == null || ids.length == 0 ? "" : ids[0],
+                    addresses(from), addresses(to), decode(m.getSubject()), text(m),
+                    date == null ? "" : date.toString()));
+            }
+            return new SyncBatch(cursor, items);
+        } finally {
+            if (folder != null && folder.isOpen()) try { folder.close(false); } catch (MessagingException ignored) {}
+            try { store.close(); } catch (MessagingException ignored) {}
+        }
+    }
+    public record SyncBatch(long lastUid, List<MailItem> messages) {}
+
     private static String decode(String s) {
         if (s == null) return "";
         try { return MimeUtility.decodeText(s); } catch (Exception ex) { return s; }
