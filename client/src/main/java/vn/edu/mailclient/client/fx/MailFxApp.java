@@ -133,7 +133,7 @@ public final class MailFxApp extends Application {
 
     private Pane inboxPage() {
         VBox wrapper = page("Hộp thư đến", "Đọc thư trực tiếp từ Gmail qua giao thức POP3");
-        receiveMode.getSelectionModel().selectFirst();
+        if (receiveMode.getValue() == null) receiveMode.getSelectionModel().selectFirst();
         receiveMode.setOnAction(e -> { inboxOffset = 0; inboxCount.setText("Nhấn Làm mới để tải thư qua " + receiveMode.getValue()); });
         Button refresh = primary("↻  Làm mới");
         Button previous = new Button("‹ Trước");
