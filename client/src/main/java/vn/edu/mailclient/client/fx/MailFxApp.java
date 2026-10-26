@@ -345,7 +345,7 @@ public final class MailFxApp extends Application {
                     try {
                         new MailDatabase().save(acc, "RECEIVED",
                             new MailItem(item.number(), item.messageId(), item.from(), item.to(),
-                                item.subject(), body, item.sentAt()));
+                                item.subject(), body, item.sentAt(), item.receivedAt()));
                     } catch (Exception ex) { System.err.println("MySQL body cache: " + ex.getMessage()); }
                 });
                 if (request == bodyRequestSequence) detailBody.setText(body);
