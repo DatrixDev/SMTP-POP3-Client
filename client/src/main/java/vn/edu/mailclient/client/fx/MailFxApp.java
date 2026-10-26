@@ -642,7 +642,7 @@ public final class MailFxApp extends Application {
                     new SmtpService().send(acc, receiver, title, content, java.util.List.copyOf(attachments));
                     try {
                         new MailDatabase().save(acc, "SENT",
-                            new MailItem(0, "", acc.email(), receiver, title, content, ""));
+                            new MailItem(0, "", acc.email(), receiver, title, content, java.time.Instant.now().toString()));
                     } catch (Exception ex) { System.err.println("MySQL: " + ex.getMessage()); }
                     return null;
                 }
