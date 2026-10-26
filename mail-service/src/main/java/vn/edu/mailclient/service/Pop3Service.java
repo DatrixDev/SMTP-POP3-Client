@@ -48,7 +48,7 @@ public final class Pop3Service {
                     items.add(new MailItem(m.getMessageNumber(), mid,
                             m.getFrom() == null ? "" : InternetAddresses(m.getFrom()),
                             m.getAllRecipients() == null ? "" : InternetAddresses(m.getAllRecipients()),
-                            decode(Objects.toString(m.getSubject(), "")), extractText(m),
+                            decode(Objects.toString(m.getSubject(), "")), "",
                             m.getSentDate() == null ? "" : m.getSentDate().toString()));
                 }
                 return items;
@@ -57,6 +57,28 @@ public final class Pop3Service {
             }
         }
     }
+    /** Fetch one message body on demand instead of downloading every body in the inbox. */
+    public String body(MailAccount account, int messageNumber) throws MessagingException, IOException {
+        if (messageNumber < 1) throw new MessagingException("Invalid POP3 message number");
+        boolean local = account.popHost().equalsIgnoreCase("localhost") || account.popHost().equals("127.0.0.1");
+        Properties props = new Properties();
+        String prefix = local ? "mail.pop3." : "mail.pop3s.";
+        props.put(prefix + "connectiontimeout", "10000");
+        props.put(prefix + "timeout", "20000");
+        props.put(prefix + "writetimeout", "20000");
+        if (!local) props.put("mail.pop3s.ssl.enable", "true");
+        Session session = Session.getInstance(props);
+        try (StoreHolder holder = new StoreHolder(session.getStore(local ? "pop3" : "pop3s"))) {
+            holder.store.connect(account.popHost(), account.popPort(), account.email(), account.password());
+            Folder folder = holder.store.getFolder("INBOX");
+            folder.open(Folder.READ_ONLY);
+            try {
+                if (messageNumber > folder.getMessageCount()) throw new MessagingException("Message no longer available");
+                return extractText(folder.getMessage(messageNumber));
+            } finally { folder.close(false); }
+        }
+    }
+
     private static String InternetAddresses(Address[] a) {
         StringJoiner join = new StringJoiner(", ");
         for (Address item : a) {
