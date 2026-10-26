@@ -112,6 +112,7 @@ public final class MailFxApp extends Application {
         composeNav = new Button("✎    Soạn thư");
         composeNav.setMaxWidth(190);composeNav.setPrefHeight(52);
         composeNav.setStyle("-fx-background-color: #c2e7ff; -fx-background-radius: 17; -fx-text-fill: #001d35; -fx-font-weight: bold; -fx-font-size: 14px;");
+        composeNav.setFocusTraversable(false);
         composeNav.setOnAction(e -> showPage("compose"));
         inboxNav=nav("▣    Hộp thư đến","inbox");
         starredNav=nav("☆    Có gắn sao","starred");
@@ -130,6 +131,7 @@ public final class MailFxApp extends Application {
         Button b = new Button(label);
         navigation.put(page,b);
         b.setMaxWidth(Double.MAX_VALUE);b.setPrefWidth(205);b.setAlignment(Pos.CENTER_LEFT);
+        b.setFocusTraversable(false);
         b.setStyle("-fx-background-color: transparent; -fx-text-fill: #444746; -fx-font-size: 14px; -fx-padding: 10 16;");
         b.setOnAction(e -> {
             showStarredOnly = "starred".equals(page);
@@ -160,8 +162,14 @@ public final class MailFxApp extends Application {
     }
 
     private void highlight(Button button, boolean active) {
-        button.setStyle("-fx-background-color: " + (active ? "#d3e3fd" : "transparent")
-                + "; -fx-background-radius: 22; -fx-text-fill: #202124; -fx-font-size: 14px; -fx-font-weight: " + (active?"bold":"normal") + "; -fx-padding: 11 14; -fx-cursor: hand;");
+        if (button == composeNav) {
+            button.setStyle("-fx-background-color: "+(active?"#a8d8ff":"#c2e7ff")
+                    +"; -fx-background-radius: 17; -fx-text-fill: #001d35; -fx-font-weight: bold; -fx-font-size: 14px; -fx-border-color: transparent; -fx-focus-color: transparent; -fx-faint-focus-color: transparent; -fx-cursor: hand;");
+        } else {
+            button.setStyle("-fx-background-color: " + (active ? "#d3e3fd" : "transparent")
+                    + "; -fx-background-radius: 22; -fx-text-fill: #202124; -fx-font-size: 14px; -fx-font-weight: " + (active?"bold":"normal")
+                    + "; -fx-padding: 11 14; -fx-border-color: transparent; -fx-focus-color: transparent; -fx-faint-focus-color: transparent; -fx-cursor: hand;");
+        }
     }
 
     private VBox page(String heading, String description) {
@@ -197,27 +205,30 @@ public final class MailFxApp extends Application {
             @Override protected void updateItem(MailItem item, boolean empty) {
                 super.updateItem(item, empty);
                 if (empty || item == null) { setGraphic(null);setText(null);return; }
-                Label check = new Label("☐"); check.setStyle("-fx-font-size: 17px; -fx-text-fill: #9aa0a6;");
+                Label check = new Label("□"); check.setMinWidth(22);check.setStyle("-fx-font-family: Segoe UI Symbol; -fx-font-size: 19px; -fx-text-fill: #6b7280;");
                 Label star = new Label(starred.contains(mailKey(item)) ? "★" : "☆");
-                star.setStyle("-fx-font-size: 21px; -fx-text-fill: "+(starred.contains(mailKey(item))?"#fbbc04":"#b3b9c0")+";");
+                star.setMinWidth(24);star.setStyle("-fx-font-family: Segoe UI Symbol; -fx-font-size: 21px;");
+                star.setStyle("-fx-font-family: Segoe UI Symbol; -fx-font-size: 21px; -fx-text-fill: "+(starred.contains(mailKey(item))?"#fbbc04":"#7b8794")+";");
                 star.setOnMouseClicked(e -> {
                     String key = mailKey(item);
                     if (!starred.add(key)) starred.remove(key);
                     refreshMailFilter(); e.consume();
                 });
                 Label sender = new Label(item.from());
-                sender.setPrefWidth(195);sender.setMinWidth(195);
+                sender.setPrefWidth(235);sender.setMinWidth(235);
+                sender.setTextOverrun(OverrunStyle.ELLIPSIS);
                 sender.setStyle("-fx-text-fill: #202124; -fx-font-weight: bold; -fx-font-size: 13px;");
                 Label preview = new Label((item.subject().isBlank() ? "(Không có tiêu đề)" : item.subject())+
                     "  -  "+item.body().replace('\n',' ').replace('\r',' '));
                 preview.setTextOverrun(OverrunStyle.ELLIPSIS);preview.setMaxWidth(Double.MAX_VALUE);
                 HBox.setHgrow(preview,Priority.ALWAYS);
                 preview.setStyle("-fx-text-fill: #202124; -fx-font-size: 13px;");
-                Label date = new Label(item.sentAt()); date.setPrefWidth(110);date.setMinWidth(110);
+                Label date = new Label(item.sentAt()); date.setPrefWidth(140);date.setMinWidth(140);
+                date.setTextOverrun(OverrunStyle.ELLIPSIS);
                 date.setAlignment(Pos.CENTER_RIGHT);date.setStyle("-fx-text-fill: #5f6368; -fx-font-size: 11px;");
-                HBox line = new HBox(14,check,star,sender,preview,date);
+                HBox line = new HBox(12,check,star,sender,preview,date);
                 line.setAlignment(Pos.CENTER_LEFT);line.setPadding(new Insets(0,18,0,18));
-                line.setStyle("-fx-background-color: "+(readMessages.contains(mailKey(item))?"#f2f6fc":"#ffffff")+";");
+                line.setStyle("-fx-background-color: "+(isSelected()?"#d3e3fd":readMessages.contains(mailKey(item))?"#f2f6fc":"#ffffff")+";");
                 line.prefWidthProperty().bind(widthProperty().subtract(16));
                 setGraphic(line);setText(null);
                 setStyle("-fx-padding: 0; -fx-background-color: transparent;");
