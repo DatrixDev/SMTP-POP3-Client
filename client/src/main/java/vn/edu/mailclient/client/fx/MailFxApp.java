@@ -62,6 +62,7 @@ public final class MailFxApp extends Application {
     private final Preferences mailFlags = Preferences.userNodeForPackage(MailFxApp.class).node("mail-flags");
     private final java.util.Set<String> readMessages = new java.util.HashSet<>();
     private boolean showStarredOnly = false;
+    private boolean showUnreadOnly = false;
     private String lanToken;
     private String lanUser;
     private Stage stage;
@@ -124,7 +125,7 @@ public final class MailFxApp extends Application {
         starredNav=nav("☆    Có gắn sao","starred");
         sentNav=nav("➤    Đã gửi","sent");
         draftNav=nav("▤    Thư nháp","drafts");
-        categoriesNav=nav("⌄    Danh mục","categories");
+        categoriesNav=nav("⌄    Chưa đọc","categories");
         lanNav=nav("◉    Mail nội bộ LAN","lan");
         settingsNav=nav("⚙    Cài đặt SMTP / POP3","settings");
         Label folders=new Label("Nhãn");folders.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #444746;");
@@ -155,6 +156,7 @@ public final class MailFxApp extends Application {
             for (var entry : navigation.entrySet()) highlight(entry.getValue(),entry.getKey().equals(page));
         }
         if (!page.equals("starred")) showStarredOnly=false;
+        showUnreadOnly = "categories".equals(page);
         root.setCenter(switch (page) {
             case "compose" -> composePage();
             case "starred" -> inboxPage();
@@ -309,7 +311,8 @@ public final class MailFxApp extends Application {
         String query = searchField.getText().trim().toLowerCase(java.util.Locale.ROOT);
         mailList.setItems(allInbox.filtered(item -> {
             boolean matches = query.isBlank() || (item.from()+" "+item.to()+" "+item.subject()+" "+item.body()).toLowerCase(java.util.Locale.ROOT).contains(query);
-            return matches && (!showStarredOnly || starred.contains(mailKey(item)));
+            return matches && (!showStarredOnly || starred.contains(mailKey(item)))
+                    && (!showUnreadOnly || !readMessages.contains(mailKey(item)));
         }));
         mailList.refresh();
     }
