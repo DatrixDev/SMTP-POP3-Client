@@ -68,10 +68,22 @@ public final class MailDatabase {
         catch (IllegalArgumentException ignored) {}
         return null;
     }
+    private static void ensureReceivedColumn(Connection c) throws SQLException {
+        try (ResultSet columns = c.getMetaData().getColumns(c.getCatalog(), null, "mail_messages", "received_at")) {
+            if (columns.next()) return;
+        }
+        try (Statement statement = c.createStatement()) {
+            try { statement.executeUpdate("ALTER TABLE mail_messages ADD COLUMN received_at DATETIME NULL"); }
+            catch (SQLException ex) {
+                if (ex.getErrorCode() != 1060) throw ex;
+            }
+        }
+    }
     public void save(MailAccount account, String direction, MailItem item) throws SQLException {
         if (!enabled()) return;
         try (Connection c = connect()) {
             long id = accountId(c, account);
+            ensureReceivedColumn(c);
             // POP3 refresh must not append a second copy of the same received message.
             // Message-ID is the primary identity; older mail without it uses a content match.
             if ("RECEIVED".equals(direction)) {
@@ -111,18 +123,30 @@ public final class MailDatabase {
                                     updateDate.executeUpdate();
                                 }
                             }
+                            Timestamp received = sentTimestamp(item.receivedAt());
+                            if (hasId && received != null) {
+                                try (PreparedStatement updateReceived = c.prepareStatement(
+                                        "UPDATE mail_messages SET received_at=? WHERE account_id=? AND direction='RECEIVED' AND message_id=? AND received_at IS NULL")) {
+                                    updateReceived.setTimestamp(1, received);
+                                    updateReceived.setLong(2, id);
+                                    updateReceived.setString(3, item.messageId());
+                                    updateReceived.executeUpdate();
+                                }
+                            }
                             return;
                         }
                     }
                 }
             }
             try (PreparedStatement s = c.prepareStatement(
-                    "INSERT INTO mail_messages(account_id,direction,message_id,sender,recipients,subject,body,sent_at) VALUES(?,?,?,?,?,?,?,?)")) {
+                    "INSERT INTO mail_messages(account_id,direction,message_id,sender,recipients,subject,body,sent_at,received_at) VALUES(?,?,?,?,?,?,?,?,?)")) {
                 s.setLong(1, id); s.setString(2, direction); s.setString(3, item.messageId());
                 s.setString(4, item.from()); s.setString(5, item.to()); s.setString(6, item.subject());
                 s.setString(7, item.body());
                 Timestamp sent = sentTimestamp(item.sentAt());
                 if (sent == null) s.setNull(8, Types.TIMESTAMP); else s.setTimestamp(8, sent);
+                Timestamp received = sentTimestamp(item.receivedAt());
+                if (received == null) s.setNull(9, Types.TIMESTAMP); else s.setTimestamp(9, received);
                 s.executeUpdate();
             }
         }
