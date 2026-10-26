@@ -314,6 +314,13 @@ public final class MailFxApp extends Application {
             task.setOnSucceeded(e -> {
                 String body = task.getValue();
                 popBodyCache.put(key, body);
+                cacheWorkers.submit(() -> {
+                    try {
+                        new MailDatabase().save(acc, "RECEIVED",
+                            new MailItem(item.number(), item.messageId(), item.from(), item.to(),
+                                item.subject(), body, item.sentAt()));
+                    } catch (Exception ex) { System.err.println("MySQL body cache: " + ex.getMessage()); }
+                });
                 if (request == bodyRequestSequence) detailBody.setText(body);
             });
             task.setOnFailed(e -> {
