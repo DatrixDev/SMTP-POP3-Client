@@ -501,6 +501,21 @@ public final class MailFxApp extends Application {
         subject.setPromptText("Tiêu đề email");
         TextArea body = new TextArea(); body.setPromptText("Nhập nội dung email...");
         body.setWrapText(true);
+        java.util.List<java.io.File> attachments = new java.util.ArrayList<>();
+        Label attachmentLabel = new Label("Chưa có tệp đính kèm");
+        Button addAttachment = iconButton("📎", "Chọn tệp đính kèm");
+        addAttachment.setOnAction(e -> {
+            javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
+            chooser.setTitle("Chọn tệp đính kèm");
+            java.util.List<java.io.File> selected = chooser.showOpenMultipleDialog(stage);
+            if (selected != null) {
+                for (java.io.File file : selected) if (!attachments.contains(file)) attachments.add(file);
+                attachmentLabel.setText(attachments.size() + " tệp: " + attachments.stream().map(java.io.File::getName)
+                    .collect(java.util.stream.Collectors.joining(", ")));
+            }
+        });
+        Button clearAttachments = iconButton("✕", "Bỏ tệp đính kèm");
+        clearAttachments.setOnAction(e -> { attachments.clear(); attachmentLabel.setText("Chưa có tệp đính kèm"); });
         Button send = primary("✉  Gửi email");
         send.setOnAction(e -> {
             final MailAccount acc;
@@ -513,7 +528,7 @@ public final class MailFxApp extends Application {
             send.setDisable(true); status.setText("Đang gửi email...");
             Task<Void> task = new Task<>() {
                 @Override protected Void call() throws Exception {
-                    new SmtpService().send(acc, receiver, title, content);
+                    new SmtpService().send(acc, receiver, title, content, java.util.List.copyOf(attachments));
                     try {
                         new MailDatabase().save(acc, "SENT",
                             new MailItem(0, "", acc.email(), receiver, title, content, ""));
@@ -536,7 +551,8 @@ public final class MailFxApp extends Application {
             status.setText("Đã lưu thư nháp");showPage("drafts");
         });
         VBox card = new VBox(12, new Label("Người nhận"), to, new Label("Tiêu đề"), subject,
-                new Label("Nội dung email"), body, new HBox(12,send,saveDraft));
+                new Label("Nội dung email"), body, new HBox(12,send,saveDraft),
+                new HBox(10,addAttachment,clearAttachments,attachmentLabel));
         card.setPadding(new Insets(24)); card.setStyle(cardStyle());
         VBox.setVgrow(body, Priority.ALWAYS);
         VBox outer = new VBox(18, page, card); outer.setPadding(new Insets(0, 28, 28, 28));
