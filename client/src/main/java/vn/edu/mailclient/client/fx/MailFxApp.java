@@ -332,8 +332,9 @@ public final class MailFxApp extends Application {
         return new String(java.util.Base64.getDecoder().decode(encoded),java.nio.charset.StandardCharsets.UTF_8);
     }
     private Pane localFolderPage(String folder,String title) {
-        VBox heading=page(title,folder.equals("sent")?"Lịch sử thư gửi qua SMTP trên máy này":"Thư nháp lưu trên máy này");
-        VBox entries=new VBox(8);entries.setPadding(new Insets(0,24,20,24));
+        VBox heading=page(title,folder.equals("sent")?"Thư đã gửi qua SMTP":"Thư nháp của bạn");
+        VBox entries=new VBox(1);entries.setPadding(new Insets(0,22,20,22));
+        entries.setStyle("-fx-background-color: white; -fx-background-radius: 14;");
         try {
             java.util.List<String> keys=new java.util.ArrayList<>();
             for(String key:localMail.keys())if(key.startsWith(folder+"."))keys.add(key);
@@ -342,26 +343,56 @@ public final class MailFxApp extends Application {
                 String[] parts=localMail.get(key,"").split("\\|",-1);
                 if(parts.length!=3)continue;
                 String recipient=decodeLocal(parts[0]),subject=decodeLocal(parts[1]),body=decodeLocal(parts[2]);
-                Label summary=new Label((subject.isBlank()?"(Không có tiêu đề)":subject)+"  —  "+recipient);
-                summary.setMaxWidth(Double.MAX_VALUE);
-                summary.setStyle("-fx-font-size: 14px; -fx-font-weight: bold;");
-                Button open=iconButton("✉","Xem thư");
+                Label person=new Label(recipient.isBlank()?"Chưa có người nhận":recipient);
+                person.setMinWidth(220);person.setPrefWidth(220);
+                person.setTextOverrun(OverrunStyle.ELLIPSIS);
+                person.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #202124;");
+                Label snippet=new Label((subject.isBlank()?"(Không có tiêu đề)":subject)
+                        +"  —  "+body.replace('\n',' ').replace('\r',' '));
+                snippet.setTextOverrun(OverrunStyle.ELLIPSIS);
+                snippet.setMaxWidth(Double.MAX_VALUE);
+                snippet.setStyle("-fx-font-size: 13px; -fx-text-fill: #444746;");
+                HBox.setHgrow(snippet,Priority.ALWAYS);
+                Button open=iconButton(folder.equals("draft")?"✎":"↗",folder.equals("draft")?"Tiếp tục soạn":"Xem thư");
                 open.setOnAction(e -> {
                     if(folder.equals("draft"))showComposeWith(recipient,subject,body);
-                    else new Alert(Alert.AlertType.INFORMATION,"Đến: "+recipient+"\\nTiêu đề: "+subject+"\\n\\n"+body).showAndWait();
+                    else {
+                        Dialog<Void> dialog=new Dialog<>();
+                        dialog.setTitle("Thư đã gửi");
+                        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+                        Label titleLabel=new Label(subject.isBlank()?"(Không có tiêu đề)":subject);
+                        titleLabel.setStyle("-fx-font-size: 20px; -fx-font-weight: bold;");
+                        Label recipientLabel=new Label("Đến: "+recipient);
+                        TextArea content=new TextArea(body);content.setEditable(false);content.setWrapText(true);
+                        content.setPrefSize(650,340);
+                        VBox details=new VBox(12,titleLabel,recipientLabel,new Separator(),content);
+                        details.setPadding(new Insets(20));
+                        dialog.getDialogPane().setContent(details);
+                        dialog.showAndWait();
+                    }
                 });
-                Button delete=iconButton("✕","Xóa bản lưu trên máy");
+                Button delete=iconButton("✕","Xóa thư khỏi danh sách trên máy");
                 delete.setOnAction(e -> {localMail.remove(key);showPage(folder.equals("draft")?"drafts":"sent");});
-                HBox line=new HBox(12,summary,new Region(),open,delete);
-                HBox.setHgrow(line.getChildren().get(1),Priority.ALWAYS);
-                line.setAlignment(Pos.CENTER_LEFT);line.setPadding(new Insets(14));
-                line.setStyle("-fx-background-color: white; -fx-background-radius: 12;");
+                HBox line=new HBox(15,person,snippet,open,delete);
+                line.setAlignment(Pos.CENTER_LEFT);
+                line.setPadding(new Insets(11,16,11,16));
+                line.setMinHeight(56);
+                line.setStyle("-fx-background-color: white; -fx-border-color: #edf0f3; -fx-border-width: 0 0 1 0; -fx-cursor: hand;");
+                line.setOnMouseClicked(e -> {
+                    if(e.getTarget() instanceof Button)return;
+                    open.fire();
+                });
                 entries.getChildren().add(line);
             }
         } catch(Exception ex) {status.setText("Không đọc được thư đã lưu: "+ex.getMessage());}
-        if(entries.getChildren().isEmpty())entries.getChildren().add(new Label("Chưa có thư trong mục này."));
+        if(entries.getChildren().isEmpty()) {
+            Label empty=new Label(folder.equals("sent")?"Chưa có email đã gửi.":"Chưa có thư nháp.");
+            empty.setStyle("-fx-font-size: 14px; -fx-text-fill: #5f6368;");
+            VBox.setMargin(empty,new Insets(28));
+            entries.getChildren().add(empty);
+        }
         ScrollPane scroll=new ScrollPane(entries);scroll.setFitToWidth(true);
-        scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+        scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent; -fx-border-color: transparent;");
         VBox box=new VBox(heading,scroll);VBox.setVgrow(scroll,Priority.ALWAYS);return box;
     }
     private void showComposeWith(String recipient,String subject,String content) {
