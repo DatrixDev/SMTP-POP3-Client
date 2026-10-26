@@ -61,6 +61,8 @@ public final class MailFxApp extends Application {
     private final java.util.Set<String> starred = new java.util.HashSet<>();
     private final Preferences mailFlags = Preferences.userNodeForPackage(MailFxApp.class).node("mail-flags");
     private final java.util.Set<String> readMessages = new java.util.HashSet<>();
+    private final java.util.Map<String,String> popBodyCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private long bodyRequestSequence = 0;
     private boolean showStarredOnly = false;
     private boolean showUnreadOnly = false;
     private String lanToken;
@@ -295,7 +297,30 @@ public final class MailFxApp extends Application {
         detailFrom.setText(item.from());
         detailTo.setText("Đến: "+item.to());
         detailDate.setText(item.sentAt());
-        detailBody.setText(item.body());
+        String key = mailKey(item);
+        String cached = popBodyCache.get(key);
+        detailBody.setText(cached != null ? cached : item.body());
+        boolean pop3 = receiveMode.getValue() == null || !receiveMode.getValue().startsWith("IMAP");
+        long request = ++bodyRequestSequence;
+        if (pop3 && cached == null && item.body().isBlank()) {
+            detailBody.setText("Đang tải nội dung thư...");
+            final MailAccount acc;
+            try { acc = account(); } catch (Exception ex) { detailBody.setText(ex.getMessage()); return; }
+            Task<String> task = new Task<>() {
+                @Override protected String call() throws Exception {
+                    return new Pop3Service().body(acc, item.number());
+                }
+            };
+            task.setOnSucceeded(e -> {
+                String body = task.getValue();
+                popBodyCache.put(key, body);
+                if (request == bodyRequestSequence) detailBody.setText(body);
+            });
+            task.setOnFailed(e -> {
+                if (request == bodyRequestSequence) detailBody.setText("Không tải được nội dung: " + task.getException().getMessage());
+            });
+            workers.submit(task);
+        }
         refreshMailFilter();
     }
 
