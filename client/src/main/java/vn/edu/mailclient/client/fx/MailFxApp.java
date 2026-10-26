@@ -183,7 +183,7 @@ public final class MailFxApp extends Application {
 
     private Pane inboxPage() {
         if (receiveMode.getValue() == null) receiveMode.getSelectionModel().selectFirst();
-        receiveMode.setOnAction(e -> { inboxOffset = 0; inboxCount.setText("Chọn Làm mới để tải thư"); });
+        receiveMode.setOnAction(e -> { inboxOffset = 0; inboxCount.setText("Đang tải thư..."); if (root.getCenter() != null) refreshInbox(null); });
         Button refresh = iconButton("↻", "Làm mới");
         refresh.setOnAction(e -> { inboxOffset = 0; refreshInbox(refresh); });
         Button previous = iconButton("‹", "Trang trước");
@@ -198,7 +198,7 @@ public final class MailFxApp extends Application {
         toolbar.setStyle("-fx-background-color: white; -fx-border-color: #edf0f3; -fx-border-width: 0 0 1 0;");
         inboxCount.setStyle("-fx-text-fill: #5f6368; -fx-font-size: 12px;");
 
-        mailList.setPlaceholder(new Label("Chưa có thư. Nhấn ↻ để tải thư từ POP3."));
+        mailList.setPlaceholder(new Label("Đang tải hoặc chưa có thư..."));
         mailList.setFixedCellSize(48);
         mailList.setStyle("-fx-background-color: white; -fx-border-width: 0;");
         mailList.setCellFactory(v -> new ListCell<>() {
@@ -411,7 +411,7 @@ public final class MailFxApp extends Application {
         try { acc = account(); } catch (Exception ex) { error(ex); return; }
         boolean imap = receiveMode.getValue() != null && receiveMode.getValue().startsWith("IMAP");
         int offset = inboxOffset;
-        refresh.setDisable(true); status.setText("Đang tải email từ " + (imap ? "IMAP" : "POP3") + "...");
+        if (refresh != null) refresh.setDisable(true); status.setText("Đang tải email từ " + (imap ? "IMAP" : "POP3") + "...");
         Task<List<MailItem>> task = new Task<>() {
             @Override protected List<MailItem> call() throws Exception {
                 List<MailItem> items = imap ? new ImapService().inbox(acc, offset, PAGE_SIZE)
@@ -427,7 +427,7 @@ public final class MailFxApp extends Application {
             }
         };
         task.setOnSucceeded(e -> {
-            refresh.setDisable(false);
+            if (refresh != null) refresh.setDisable(false);
             List<MailItem> items = task.getValue();
             allInbox.setAll(items); refreshMailFilter();
             inboxCount.setText("Đã tải " + items.size() + " email từ " + (imap ? "IMAP" : "POP3"));
