@@ -54,6 +54,7 @@ public final class MailFxApp extends Application {
     private final TextField searchField = new TextField();
     private final javafx.collections.ObservableList<MailItem> allInbox = FXCollections.observableArrayList();
     private final java.util.Set<String> starred = new java.util.HashSet<>();
+    private final Preferences mailFlags = Preferences.userNodeForPackage(MailFxApp.class).node("mail-flags");
     private final java.util.Set<String> readMessages = new java.util.HashSet<>();
     private boolean showStarredOnly = false;
     private String lanToken;
@@ -213,6 +214,7 @@ public final class MailFxApp extends Application {
                 star.setOnMouseClicked(e -> {
                     String key = mailKey(item);
                     if (!starred.add(key)) starred.remove(key);
+                    mailFlags.putBoolean("star." + Integer.toHexString(key.hashCode()), starred.contains(key));
                     refreshMailFilter(); e.consume();
                 });
                 Label sender = new Label(item.from());
@@ -281,6 +283,7 @@ public final class MailFxApp extends Application {
 
     private void showMessagePreview(MailItem item) {
         readMessages.add(mailKey(item));
+        mailFlags.putBoolean("read." + Integer.toHexString(mailKey(item).hashCode()), true);
         detailSubject.setText(item.subject().isBlank()?"(Không có tiêu đề)":item.subject());
         detailFrom.setText(item.from());
         detailTo.setText("Đến: "+item.to());
@@ -430,6 +433,11 @@ public final class MailFxApp extends Application {
         task.setOnSucceeded(e -> {
             if (refresh != null) refresh.setDisable(false);
             List<MailItem> items = task.getValue();
+            for (MailItem item : items) {
+                String key = mailKey(item);
+                if (mailFlags.getBoolean("star." + Integer.toHexString(key.hashCode()), false)) starred.add(key);
+                if (mailFlags.getBoolean("read." + Integer.toHexString(key.hashCode()), false)) readMessages.add(key);
+            }
             allInbox.setAll(items); refreshMailFilter();
             inboxCount.setText("Đã tải " + items.size() + " email từ " + (imap ? "IMAP" : "POP3"));
             pageLabel.setText("Trang " + (inboxOffset / PAGE_SIZE + 1));
