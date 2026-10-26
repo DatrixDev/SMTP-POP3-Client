@@ -49,7 +49,8 @@ public final class Pop3Service {
                             m.getFrom() == null ? "" : InternetAddresses(m.getFrom()),
                             m.getAllRecipients() == null ? "" : InternetAddresses(m.getAllRecipients()),
                             decode(Objects.toString(m.getSubject(), "")), "",
-                            m.getSentDate() == null ? "" : m.getSentDate().toString()));
+                            m.getSentDate() == null ? "" : m.getSentDate().toInstant().toString(),
+                            m.getReceivedDate() == null ? "" : m.getReceivedDate().toInstant().toString()));
                 }
                 return items;
             } finally {
