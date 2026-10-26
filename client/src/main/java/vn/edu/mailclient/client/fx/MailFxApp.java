@@ -358,12 +358,13 @@ public final class MailFxApp extends Application {
         dialog.showAndWait();
         refreshMailFilter();
     }
-    private void saveLocalMessage(String folder,String to,String subject,String body) {
+    private String saveLocalMessage(String folder,String to,String subject,String body) {
         String id=java.util.UUID.randomUUID().toString();
         String value=java.util.Base64.getEncoder().encodeToString(to.getBytes(java.nio.charset.StandardCharsets.UTF_8))
                 +"|"+java.util.Base64.getEncoder().encodeToString(subject.getBytes(java.nio.charset.StandardCharsets.UTF_8))
                 +"|"+java.util.Base64.getEncoder().encodeToString(body.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         localMail.put(folder+"."+id,value);
+        return id;
     }
     private String decodeLocal(String encoded) {
         return new String(java.util.Base64.getDecoder().decode(encoded),java.nio.charset.StandardCharsets.UTF_8);
@@ -572,7 +573,15 @@ public final class MailFxApp extends Application {
         });
         Button saveDraft=primary("Lưu nháp");
         saveDraft.setOnAction(e -> {
-            saveLocalMessage("draft",to.getText(),subject.getText(),body.getText());
+            String draftId = saveLocalMessage("draft",to.getText(),subject.getText(),body.getText());
+            try {
+                MailAccount acc = account();
+                String recipient = to.getText(), title = subject.getText(), content = body.getText();
+                cacheWorkers.submit(() -> {
+                    try { new MailDatabase().saveDraft(acc, draftId, recipient, title, content); }
+                    catch (Exception ex) { System.err.println("Draft MySQL: " + ex.getMessage()); }
+                });
+            } catch (Exception ex) { System.err.println("Draft local only: " + ex.getMessage()); }
             status.setText("Đã lưu thư nháp");showPage("drafts");
         });
         VBox card = new VBox(12, new Label("Người nhận"), to, new Label("Tiêu đề"), subject,
