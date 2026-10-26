@@ -98,3 +98,23 @@ The project now includes a `server` Maven module and a JavaFX **Mail nội bộ 
 **Important security limitation:** The UDP LAN mode is a course demonstration, not an Internet mail server. Its traffic, including login passwords, is **not encrypted**. Do not reuse real passwords, expose UDP port 2023 to the public Internet, or deploy on an untrusted network. Gmail App Password is used only by SMTP/POP3/IMAP clients and is not transmitted to the LAN server.
 
 The `ImapService.sinceUid(...)` API supports incremental reads by UID, but persistent cursor storage, scheduled polling, HTML WebView rendering and attachments are not yet wired into the desktop UI. Manual IMAP refresh remains available.
+
+
+## Local SMTP + POP3 Server with Desktop Dashboard (course demo)
+
+The `server` module now also runs actual loopback SMTP and POP3 listeners, **in addition to** the older experimental UDP LAN service:
+
+- SMTP: `127.0.0.1:2525` (authenticated SMTP AUTH LOGIN; local `@localhost` addresses only).
+- POP3: `127.0.0.1:2110` (USER/PASS, STAT, LIST, UIDL, RETR, TOP, DELE, RSET).
+- UDP LAN: `127.0.0.1:2023` (legacy feature).
+- MySQL: `lan_users` for accounts, `local_mail` for SMTP messages.
+- Server Dashboard: Swing desktop window with accounts, mail list, message viewer and logs.
+
+From project root, start MySQL (`docker compose up -d`) and build (`mvn clean package -DskipTests`). Then run `cd server; mvn exec:java`. Keep it running. Start a separate terminal in `client` and run `mvn exec:java`.
+
+In the **Server Dashboard**, create `alice` and `bob` with passwords. In Client settings select **Dùng localhost**, enter `alice@localhost` and Alice's password, then send to `bob@localhost`. Open a second Client with Bob's credentials and select **POP3 (bài lab)** to refresh inbox. The server Dashboard shows stored messages in MySQL.
+
+For Gmail, use **Dùng Gmail** and your Gmail address and eligible App Password. Gmail mail is processed directly by Google's servers; it is not stored in the local `local_mail` table.
+
+**Security and scope:** SMTP/POP3 local listeners bind to loopback only and do not use TLS; do not expose them outside your own machine. This is a limited educational protocol implementation, not a production mail server. It does not relay Internet email, offer STARTTLS, support all SMTP/POP3 extensions or MIME attachments management. Run with a desktop session for the Swing dashboard. Gmail and local modes are independent.
+
