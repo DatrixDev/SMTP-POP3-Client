@@ -417,6 +417,11 @@ public final class MailFxApp extends Application {
         scroll.setFitToWidth(true);
         VBox.setVgrow(scroll, Priority.ALWAYS);
         wrapper.getChildren().addAll(heading, scroll);
+        // Preserve access to drafts created before MySQL synchronization was added.
+        Button legacy = iconButton("▤", "Xem thư nháp cũ lưu trên máy");
+        legacy.setText("Xem thư nháp lưu trên máy");
+        legacy.setOnAction(e -> root.setCenter(localFolderPage("draft", "Thư nháp trên máy")));
+        wrapper.getChildren().add(legacy);
         VBox.setVgrow(scroll, Priority.ALWAYS);
         final MailAccount acc;
         try { acc = account(); }
