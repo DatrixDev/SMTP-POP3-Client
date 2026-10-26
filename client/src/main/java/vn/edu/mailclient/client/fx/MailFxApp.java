@@ -185,7 +185,6 @@ public final class MailFxApp extends Application {
         toolbar.setStyle("-fx-background-color: white; -fx-border-color: #edf0f3; -fx-border-width: 0 0 1 0;");
         inboxCount.setStyle("-fx-text-fill: #5f6368; -fx-font-size: 12px;");
 
-        TextField filter = searchField;
         mailList.setPlaceholder(new Label("Chưa có thư. Nhấn ↻ để tải thư từ POP3."));
         mailList.setFixedCellSize(48);
         mailList.setStyle("-fx-background-color: white; -fx-border-width: 0;");
@@ -224,16 +223,53 @@ public final class MailFxApp extends Application {
             if (item != null && e.getClickCount() >= 2) showMessageDialog(item);
         });
         mailList.getSelectionModel().selectedItemProperty().addListener((obs,old,item) -> {
-            if (item != null) status.setText("Đã chọn: "+item.subject()+" — nhấp đúp để đọc");
+            if (item != null) {
+                showMessagePreview(item);
+                status.setText("Đang xem: "+item.subject());
+            }
         });
         refreshMailFilter();
         VBox.setVgrow(mailList,Priority.ALWAYS);
-        VBox container = new VBox(toolbar,mailList);
+        detailSubject.setStyle("-fx-font-size: 21px; -fx-font-weight: bold; -fx-text-fill: #202124;");
+        detailSubject.setWrapText(true);
+        detailFrom.setStyle("-fx-font-weight: bold; -fx-text-fill: #202124;");
+        detailTo.setStyle("-fx-text-fill: #5f6368;");
+        detailDate.setStyle("-fx-text-fill: #5f6368;");
+        detailBody.setEditable(false);detailBody.setWrapText(true);
+        detailBody.setStyle("-fx-control-inner-background: white; -fx-font-size: 14px; -fx-border-color: transparent;");
+        VBox.setVgrow(detailBody,Priority.ALWAYS);
+        Button expand = iconButton("⛶", "Mở thư trong cửa sổ");
+        expand.setOnAction(e -> {
+            MailItem item=mailList.getSelectionModel().getSelectedItem();
+            if(item!=null)showMessageDialog(item);
+        });
+        HBox messageHeader = new HBox(12,detailFrom,new Region(),detailDate,expand);
+        HBox.setHgrow(messageHeader.getChildren().get(1),Priority.ALWAYS);
+        messageHeader.setAlignment(Pos.CENTER_LEFT);
+        VBox preview = new VBox(12,detailSubject,new Separator(),messageHeader,detailTo,detailBody);
+        preview.setPadding(new Insets(22,25,14,25));
+        preview.setStyle("-fx-background-color: white;");
+        SplitPane split = new SplitPane(mailList,preview);
+        split.setOrientation(javafx.geometry.Orientation.VERTICAL);
+        split.setDividerPositions(0.50);
+        split.setStyle("-fx-background-color: white; -fx-box-border: transparent;");
+        VBox.setVgrow(split,Priority.ALWAYS);
+        VBox container = new VBox(toolbar,split);
         container.setStyle("-fx-background-color: white; -fx-background-radius: 16 16 0 0;");
-        container.setPadding(new Insets(0)); VBox.setVgrow(container,Priority.ALWAYS);
+        VBox.setVgrow(container,Priority.ALWAYS);
         VBox outer = new VBox(container);outer.setPadding(new Insets(0,16,10,0));
         VBox.setVgrow(container,Priority.ALWAYS);
         return outer;
+    }
+
+    private void showMessagePreview(MailItem item) {
+        readMessages.add(mailKey(item));
+        detailSubject.setText(item.subject().isBlank()?"(Không có tiêu đề)":item.subject());
+        detailFrom.setText(item.from());
+        detailTo.setText("Đến: "+item.to());
+        detailDate.setText(item.sentAt());
+        detailBody.setText(item.body());
+        refreshMailFilter();
     }
 
     private Button iconButton(String title,String tooltip) {
