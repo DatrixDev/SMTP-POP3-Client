@@ -159,6 +159,7 @@ public final class MailFxApp extends Application {
             case "lan" -> lanPage();
             default -> inboxPage();
         });
+        if (page.equals("inbox")) javafx.application.Platform.runLater(() -> refreshInbox(null));
     }
 
     private void highlight(Button button, boolean active) {
