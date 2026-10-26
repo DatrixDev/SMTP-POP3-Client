@@ -75,8 +75,8 @@ public final class Pop3Service {
 
     private static String htmlToText(String html) {
         return html.replaceAll("(?is)<(script|style)[^>]*>.*?</\\1>", "")
-                .replaceAll("(?i)<br\\s*/?>", "\\n")
-                .replaceAll("(?i)</(p|div|tr|li)>", "\\n")
+                .replaceAll("(?i)<br\\s*/?>", "\n")
+                .replaceAll("(?i)</(p|div|tr|li)>", "\n")
                 .replaceAll("(?s)<[^>]+>", " ")
                 .replace("&nbsp;", " ").replace("&amp;", "&")
                 .replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", String.valueOf((char) 34))
