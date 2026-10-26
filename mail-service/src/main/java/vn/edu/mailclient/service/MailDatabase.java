@@ -6,9 +6,37 @@ import vn.edu.mailclient.common.MailItem;
 
 /** Optional local MySQL cache. Credentials come from environment, never source code. */
 public final class MailDatabase {
-    private final String url = System.getenv("MAIL_DB_URL");
-    private final String user = System.getenv("MAIL_DB_USER");
-    private final String pass = System.getenv("MAIL_DB_PASSWORD");
+    private static String setting(String key, String fallback) {
+        String env = System.getenv(key);
+        if (env != null && !env.isBlank()) return env;
+        java.nio.file.Path cwd = java.nio.file.Path.of("").toAbsolutePath();
+        for (java.nio.file.Path path : java.util.List.of(cwd.resolve(".env"), cwd.resolve("../.env").normalize())) {
+            if (!java.nio.file.Files.isRegularFile(path)) continue;
+            try {
+                for (String line : java.nio.file.Files.readAllLines(path)) {
+                    String trimmed = line.trim();
+                    if (trimmed.startsWith("#") || trimmed.isEmpty()) continue;
+                    int equals = trimmed.indexOf('=');
+                    if (equals < 0 || !trimmed.substring(0, equals).trim().equals(key)) continue;
+                    String value = trimmed.substring(equals + 1).trim();
+                    if (value.length() >= 2 && ((value.startsWith("\"") && value.endsWith("\""))
+                            || (value.startsWith("'") && value.endsWith("'")))) {
+                        value = value.substring(1, value.length() - 1);
+                    }
+                    if (!value.isBlank()) return value;
+                }
+            } catch (java.io.IOException ex) {
+                System.err.println("Cannot read database configuration: " + ex.getMessage());
+            }
+            break;
+        }
+        return fallback;
+    }
+
+    private final String url = setting("MAIL_DB_URL", "jdbc:mysql://127.0.0.1:"
+            + setting("MYSQL_PORT", "3307") + "/smtp_pop3_client");
+    private final String user = setting("MAIL_DB_USER", setting("MYSQL_USER", "mailapp"));
+    private final String pass = setting("MAIL_DB_PASSWORD", setting("MYSQL_PASSWORD", ""));
     public boolean enabled() { return url != null && !url.isBlank(); }
     private Connection connect() throws SQLException {
         return DriverManager.getConnection(url, user == null ? "" : user, pass == null ? "" : pass);
