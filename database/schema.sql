@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS mail_messages (
   subject VARCHAR(998),
   body MEDIUMTEXT,
   sent_at DATETIME NULL,
+  received_at DATETIME NULL,
   fetched_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_mail_account FOREIGN KEY (account_id) REFERENCES mail_accounts(id) ON DELETE CASCADE,
   INDEX idx_account_direction (account_id, direction),
