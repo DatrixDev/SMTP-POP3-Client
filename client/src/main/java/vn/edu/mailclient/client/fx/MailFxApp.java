@@ -355,7 +355,7 @@ public final class MailFxApp extends Application {
             });
             workers.submit(task);
         }
-        refreshMailFilter();
+        mailList.refresh();
     }
 
     private Button iconButton(String title,String tooltip) {
