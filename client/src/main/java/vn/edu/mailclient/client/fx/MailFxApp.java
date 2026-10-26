@@ -49,6 +49,11 @@ public final class MailFxApp extends Application {
     private final TextField popHost = new TextField(), popPort = new TextField();
     private final PasswordField password = new PasswordField();
     private Button inboxNav, composeNav, settingsNav, lanNav;
+    private final TextField searchField = new TextField();
+    private final javafx.collections.ObservableList<MailItem> allInbox = FXCollections.observableArrayList();
+    private final java.util.Set<String> starred = new java.util.HashSet<>();
+    private final java.util.Set<String> readMessages = new java.util.HashSet<>();
+    private boolean showStarredOnly = false;
     private String lanToken;
     private String lanUser;
     private Stage stage;
@@ -84,37 +89,48 @@ public final class MailFxApp extends Application {
     }
 
     private HBox header() {
-        Label logo = new Label("✉  Mail");
-        logo.setFont(Font.font("System", FontWeight.BOLD, 23)); logo.setTextFill(Color.WHITE);
-        Label mark = new Label("●  SMTP + POP3");
-        mark.setTextFill(Color.web("#188038")); mark.setStyle("-fx-font-weight: bold;");
-        accountLabel.setTextFill(Color.WHITE);
-        HBox right = new HBox(18, mark, accountLabel); right.setAlignment(Pos.CENTER_RIGHT);
-        Region space = new Region(); HBox.setHgrow(space, Priority.ALWAYS);
-        HBox h = new HBox(20, logo, space, right);
-        h.setAlignment(Pos.CENTER_LEFT); h.setPadding(new Insets(20, 28, 20, 28));
+        Label menu = new Label("☰");menu.setStyle("-fx-font-size: 21px; -fx-text-fill: #5f6368;");
+        Label logo = new Label("✉ Gmail");logo.setFont(Font.font("System",FontWeight.NORMAL,25));
+        logo.setTextFill(Color.web("#202124"));
+        searchField.setPromptText("⌕   Tìm kiếm trong thư");
+        searchField.setPrefWidth(570);searchField.setPrefHeight(46);
+        searchField.setStyle("-fx-background-color: #e9eef6; -fx-background-radius: 26; -fx-font-size: 14px; -fx-padding: 0 18;");
+        searchField.textProperty().addListener((o,a,b) -> refreshMailFilter());
+        Region expand = new Region();HBox.setHgrow(expand,Priority.ALWAYS);
+        Button settings=iconButton("⚙","Cấu hình SMTP / POP3");settings.setOnAction(e->showPage("settings"));
+        accountLabel.setTextFill(Color.web("#5f6368"));
+        HBox h=new HBox(28,menu,logo,searchField,expand,settings,accountLabel);
+        h.setAlignment(Pos.CENTER_LEFT);h.setPadding(new Insets(10,24,10,18));
         h.setStyle("-fx-background-color: #f6f8fc;");
         return h;
     }
 
     private VBox sidebar() {
-        Label section = new Label("HỘP THƯ"); section.setTextFill(Color.web("#5f6368"));
-        section.setStyle("-fx-font-weight: bold;");
-        inboxNav = nav("▣   Hộp thư đến", "inbox");
-        composeNav = nav("✎   Soạn thư mới", "compose");
-        settingsNav = nav("⚙   Cấu hình server", "settings");
-        lanNav = nav("◉   Mail nội bộ LAN", "lan");
-        VBox side = new VBox(12, section, inboxNav, composeNav, lanNav, settingsNav);
-        side.setPadding(new Insets(28, 14, 20, 14)); side.setPrefWidth(235);
+        composeNav = new Button("✎    Soạn thư");
+        composeNav.setMaxWidth(170);composeNav.setPrefHeight(55);
+        composeNav.setStyle("-fx-background-color: #c2e7ff; -fx-background-radius: 17; -fx-text-fill: #001d35; -fx-font-weight: bold; -fx-font-size: 14px;");
+        composeNav.setOnAction(e -> showPage("compose"));
+        inboxNav=nav("▣    Hộp thư đến","inbox");
+        Button starredNav=nav("☆    Có gắn sao","starred");
+        Button sentNav=nav("➤    Đã gửi","sent");
+        Button draftNav=nav("▤    Thư nháp","drafts");
+        Button more=nav("⌄    Danh mục","categories");
+        lanNav=nav("◉    Mail nội bộ LAN","lan");
+        settingsNav=nav("⚙    Cài đặt SMTP / POP3","settings");
+        Label folders=new Label("Nhãn");folders.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #444746;");
+        VBox side=new VBox(8,composeNav,inboxNav,starredNav,sentNav,draftNav,more,new Separator(),folders,lanNav,settingsNav);
+        side.setPadding(new Insets(10,12,10,12));side.setPrefWidth(255);
         side.setStyle("-fx-background-color: #f6f8fc;");
         return side;
     }
-
-    private Button nav(String label, String page) {
+    private Button nav(String label,String page) {
         Button b = new Button(label);
-        b.setMaxWidth(Double.MAX_VALUE); b.setAlignment(Pos.CENTER_LEFT);
-        b.setStyle("-fx-background-color: transparent; -fx-text-fill: #202124; -fx-font-size: 14px; -fx-font-weight: bold; -fx-padding: 15 14;");
-        b.setOnAction(e -> showPage(page));
+        b.setMaxWidth(Double.MAX_VALUE);b.setAlignment(Pos.CENTER_LEFT);
+        b.setStyle("-fx-background-color: transparent; -fx-text-fill: #444746; -fx-font-size: 14px; -fx-padding: 10 16;");
+        b.setOnAction(e -> {
+            showStarredOnly = "starred".equals(page);
+            showPage(page);
+        });
         return b;
     }
 
@@ -125,8 +141,13 @@ public final class MailFxApp extends Application {
             highlight(settingsNav, page.equals("settings"));
             highlight(lanNav, page.equals("lan"));
         }
+        if (!page.equals("starred")) showStarredOnly=false;
         root.setCenter(switch (page) {
             case "compose" -> composePage();
+            case "starred" -> inboxPage();
+            case "sent" -> sentPage();
+            case "drafts" -> draftsPage();
+            case "categories" -> inboxPage();
             case "settings" -> settingsPage();
             case "lan" -> lanPage();
             default -> inboxPage();
@@ -148,81 +169,117 @@ public final class MailFxApp extends Application {
     }
 
     private Pane inboxPage() {
-        VBox wrapper = page("Hộp thư đến", "Nhận thư từ Gmail hoặc localhost qua POP3");
         if (receiveMode.getValue() == null) receiveMode.getSelectionModel().selectFirst();
-        receiveMode.setOnAction(e -> { inboxOffset = 0; inboxCount.setText("Nhấn Làm mới để tải thư qua " + receiveMode.getValue()); });
-        Button refresh = primary("↻  Làm mới");
-        Button previous = new Button("‹ Trước");
-        Button next = new Button("Tiếp ›");
-        previous.setOnAction(e -> { inboxOffset = Math.max(0, inboxOffset - PAGE_SIZE); refreshInbox(refresh); });
-        next.setOnAction(e -> { inboxOffset += PAGE_SIZE; refreshInbox(refresh); });
+        receiveMode.setOnAction(e -> { inboxOffset = 0; inboxCount.setText("Chọn Làm mới để tải thư"); });
+        Button refresh = iconButton("↻", "Làm mới");
         refresh.setOnAction(e -> { inboxOffset = 0; refreshInbox(refresh); });
-        pageLabel.setText("Trang " + (inboxOffset / PAGE_SIZE + 1));
-        HBox paging = new HBox(9, previous, pageLabel, next);
-        paging.setAlignment(Pos.CENTER_RIGHT);
-        HBox heading = new HBox(20, wrapper, new Region(), receiveMode, refresh);
-        HBox.setHgrow(heading.getChildren().get(1), Priority.ALWAYS);
-        heading.setAlignment(Pos.CENTER_LEFT); heading.setPadding(new Insets(0, 22, 0, 0));
+        Button previous = iconButton("‹", "Trang trước");
+        Button next = iconButton("›", "Trang sau");
+        previous.setOnAction(e -> { inboxOffset = Math.max(0,inboxOffset - PAGE_SIZE); refreshInbox(refresh); });
+        next.setOnAction(e -> { inboxOffset += PAGE_SIZE; refreshInbox(refresh); });
+        Label count = pageLabel;
+        HBox spacer = new HBox(); HBox.setHgrow(spacer, Priority.ALWAYS);
+        Label selectIcon = new Label("☐"); selectIcon.setStyle("-fx-font-size: 20px; -fx-text-fill: #5f6368;");
+        HBox toolbar = new HBox(18, selectIcon, refresh, receiveMode, spacer, inboxCount, previous, count, next);
+        toolbar.setAlignment(Pos.CENTER_LEFT); toolbar.setPadding(new Insets(12,18,12,18));
+        toolbar.setStyle("-fx-background-color: white; -fx-border-color: #edf0f3; -fx-border-width: 0 0 1 0;");
+        inboxCount.setStyle("-fx-text-fill: #5f6368; -fx-font-size: 12px;");
 
-        Label listTitle = new Label("Danh sách email"); listTitle.setFont(Font.font("System", FontWeight.BOLD, 19));
-        inboxCount.setTextFill(Color.web("#6f829e"));
-        mailList.setPlaceholder(new Label("Chưa có email. Nhấn Làm mới."));
+        TextField filter = searchField;
+        mailList.setPlaceholder(new Label("Chưa có thư. Nhấn ↻ để tải thư từ POP3."));
+        mailList.setFixedCellSize(48);
+        mailList.setStyle("-fx-background-color: white; -fx-border-width: 0;");
         mailList.setCellFactory(v -> new ListCell<>() {
             @Override protected void updateItem(MailItem item, boolean empty) {
                 super.updateItem(item, empty);
-                if (empty || item == null) { setGraphic(null); setText(null); return; }
-                Label from = new Label(item.from()); from.setStyle("-fx-font-weight: bold; -fx-font-size: 13px;");
-                Label subject = new Label(item.subject().isBlank() ? "(Không có tiêu đề)" : item.subject());
-                subject.setTextFill(Color.web("#356bb5"));
-                Label date = new Label(item.sentAt()); date.setTextFill(Color.web("#8290a3"));
-                VBox vbox = new VBox(5, from, subject, date);
-                vbox.setMinWidth(0);
-                // Bind labels to the actual cell width so long sender names do not cause horizontal scrolling.
-                vbox.prefWidthProperty().bind(widthProperty().subtract(24));
-                for (Label l : new Label[]{from, subject, date}) {
-                    l.setMaxWidth(Double.MAX_VALUE); l.setTextOverrun(OverrunStyle.ELLIPSIS);
-                }
-                vbox.setPadding(new Insets(10, 7, 10, 7));
-                setGraphic(vbox); setText(null);
+                if (empty || item == null) { setGraphic(null);setText(null);return; }
+                Label check = new Label("☐"); check.setStyle("-fx-font-size: 17px; -fx-text-fill: #9aa0a6;");
+                Label star = new Label(starred.contains(mailKey(item)) ? "★" : "☆");
+                star.setStyle("-fx-font-size: 21px; -fx-text-fill: "+(starred.contains(mailKey(item))?"#fbbc04":"#b3b9c0")+";");
+                star.setOnMouseClicked(e -> {
+                    String key = mailKey(item);
+                    if (!starred.add(key)) starred.remove(key);
+                    refreshMailFilter(); e.consume();
+                });
+                Label sender = new Label(item.from());
+                sender.setPrefWidth(195);sender.setMinWidth(195);
+                sender.setStyle("-fx-text-fill: #202124; -fx-font-weight: bold; -fx-font-size: 13px;");
+                Label preview = new Label((item.subject().isBlank() ? "(Không có tiêu đề)" : item.subject())+
+                    "  -  "+item.body().replace('\\n',' ').replace('\\r',' '));
+                preview.setTextOverrun(OverrunStyle.ELLIPSIS);preview.setMaxWidth(Double.MAX_VALUE);
+                HBox.setHgrow(preview,Priority.ALWAYS);
+                preview.setStyle("-fx-text-fill: #202124; -fx-font-size: 13px;");
+                Label date = new Label(item.sentAt()); date.setPrefWidth(110);date.setMinWidth(110);
+                date.setAlignment(Pos.CENTER_RIGHT);date.setStyle("-fx-text-fill: #5f6368; -fx-font-size: 11px;");
+                HBox line = new HBox(14,check,star,sender,preview,date);
+                line.setAlignment(Pos.CENTER_LEFT);line.setPadding(new Insets(0,18,0,18));
+                line.setStyle("-fx-background-color: "+(readMessages.contains(mailKey(item))?"#f2f6fc":"#ffffff")+";");
+                line.prefWidthProperty().bind(widthProperty().subtract(16));
+                setGraphic(line);setText(null);
+                setStyle("-fx-padding: 0; -fx-background-color: transparent;");
             }
         });
-        VBox left = new VBox(12, listTitle, inboxCount, mailList, paging);
-        left.setMinWidth(0);
-        left.setPadding(new Insets(22)); left.setStyle(cardStyle());
-        VBox.setVgrow(mailList, Priority.ALWAYS);
-
-        Label detailTitle = new Label("Nội dung email"); detailTitle.setFont(Font.font("System", FontWeight.BOLD, 19));
-        detailSubject.setFont(Font.font("System", FontWeight.BOLD, 20));
-        detailSubject.setWrapText(true);
-        detailBody.setEditable(false); detailBody.setWrapText(true);
-        detailBody.setPromptText("Chọn email bên trái để xem nội dung");
-        VBox right = new VBox(13, detailTitle, new Separator(), detailSubject, detailFrom, detailTo,
-                detailDate, new Separator(), detailBody);
-        right.setPadding(new Insets(22)); right.setStyle(cardStyle());
-        right.setMinWidth(0);
-        for (Label label : new Label[]{detailFrom, detailTo, detailDate}) {
-            label.setWrapText(true);
-            label.setMaxWidth(Double.MAX_VALUE);
-        }
-        detailSubject.setMaxWidth(Double.MAX_VALUE);
-        VBox.setVgrow(detailBody, Priority.ALWAYS);
-        mailList.getSelectionModel().selectedItemProperty().addListener((obs, old, item) -> {
-            if (item == null) return;
-            detailSubject.setText(item.subject().isBlank() ? "(Không có tiêu đề)" : item.subject());
-            detailFrom.setText("Từ: " + item.from());
-            detailTo.setText("Đến: " + item.to());
-            detailDate.setText("Ngày: " + item.sentAt());
-            detailBody.setText(item.body()); detailBody.positionCaret(0);
+        mailList.setOnMouseClicked(e -> {
+            MailItem item = mailList.getSelectionModel().getSelectedItem();
+            if (item != null && e.getClickCount() >= 2) showMessageDialog(item);
         });
-        SplitPane split = new SplitPane(left, right);
-        split.setMinWidth(0);
-        split.setDividerPositions(0.38); split.setStyle("-fx-background-color: transparent;");
-        VBox.setVgrow(split, Priority.ALWAYS);
-        VBox content = new VBox(0, heading, split);
-        content.setPadding(new Insets(0, 20, 20, 20));
-        return content;
+        mailList.getSelectionModel().selectedItemProperty().addListener((obs,old,item) -> {
+            if (item != null) status.setText("Đã chọn: "+item.subject()+" — nhấp đúp để đọc");
+        });
+        refreshMailFilter();
+        VBox.setVgrow(mailList,Priority.ALWAYS);
+        VBox container = new VBox(toolbar,mailList);
+        container.setStyle("-fx-background-color: white; -fx-background-radius: 16 16 0 0;");
+        container.setPadding(new Insets(0)); VBox.setVgrow(container,Priority.ALWAYS);
+        VBox outer = new VBox(container);outer.setPadding(new Insets(0,16,10,0));
+        VBox.setVgrow(container,Priority.ALWAYS);
+        return outer;
     }
 
+    private Button iconButton(String title,String tooltip) {
+        Button b = new Button(title);b.setTooltip(new Tooltip(tooltip));
+        b.setStyle("-fx-background-color: transparent; -fx-text-fill: #5f6368; -fx-font-size: 20px; -fx-cursor: hand;");
+        return b;
+    }
+    private String mailKey(MailItem item) {
+        return item.messageId().isBlank() ? item.from()+"|"+item.subject()+"|"+item.sentAt() : item.messageId();
+    }
+    private void refreshMailFilter() {
+        if (allInbox.isEmpty() && !mailList.getItems().isEmpty()) allInbox.setAll(mailList.getItems());
+        String query = searchField.getText().trim().toLowerCase(java.util.Locale.ROOT);
+        mailList.setItems(allInbox.filtered(item -> {
+            boolean matches = query.isBlank() || (item.from()+" "+item.to()+" "+item.subject()+" "+item.body()).toLowerCase(java.util.Locale.ROOT).contains(query);
+            return matches && (!showStarredOnly || starred.contains(mailKey(item)));
+        }));
+    }
+    private void showMessageDialog(MailItem item) {
+        readMessages.add(mailKey(item));
+        Dialog<Void> dialog = new Dialog<>();dialog.setTitle(item.subject().isBlank()?"Thư":item.subject());
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dialog.getDialogPane().setPrefSize(900,660);
+        Label title = new Label(item.subject());title.setWrapText(true);title.setStyle("-fx-font-size: 25px; -fx-font-weight: bold;");
+        Label from = new Label(item.from());from.setStyle("-fx-font-weight: bold; -fx-font-size: 14px;");
+        Label to = new Label("Đến: "+item.to());to.setStyle("-fx-text-fill: #5f6368;");
+        Label date = new Label(item.sentAt());date.setStyle("-fx-text-fill: #5f6368;");
+        TextArea body = new TextArea(item.body());body.setWrapText(true);body.setEditable(false);
+        body.setStyle("-fx-control-inner-background: white; -fx-font-size: 14px;");
+        VBox.setVgrow(body,Priority.ALWAYS);
+        VBox content = new VBox(18,title,new Separator(),new HBox(12,from,date),to,body);
+        content.setPadding(new Insets(28));dialog.getDialogPane().setContent(content);
+        dialog.showAndWait();
+        refreshMailFilter();
+    }
+    private Pane sentPage() {
+        VBox v=page("Đã gửi","Thư SMTP đã gửi được lưu vào MySQL khi tính năng lưu trữ được bật.");
+        Button see=primary("Xem thư đã gửi tại database");
+        see.setOnAction(e -> status.setText("Bạn có thể kiểm tra bảng mail_messages trong MySQL (SENT)."));
+        VBox box=new VBox(18,v,see);box.setPadding(new Insets(22));return box;
+    }
+    private Pane draftsPage() {
+        VBox p=page("Thư nháp","Mục giao diện; lưu nháp chưa được triển khai.");
+        Button write=primary("Soạn thư");write.setOnAction(e->showPage("compose"));
+        VBox box=new VBox(18,p,write);box.setPadding(new Insets(22));return box;
+    }
     private void refreshInbox(Button refresh) {
         final MailAccount acc;
         try { acc = account(); } catch (Exception ex) { error(ex); return; }
@@ -246,7 +303,7 @@ public final class MailFxApp extends Application {
         task.setOnSucceeded(e -> {
             refresh.setDisable(false);
             List<MailItem> items = task.getValue();
-            mailList.setItems(FXCollections.observableArrayList(items));
+            allInbox.setAll(items); refreshMailFilter();
             inboxCount.setText("Đã tải " + items.size() + " email từ " + (imap ? "IMAP" : "POP3"));
             pageLabel.setText("Trang " + (inboxOffset / PAGE_SIZE + 1));
             status.setText("Đã cập nhật hộp thư");
@@ -284,7 +341,7 @@ public final class MailFxApp extends Application {
                     for (MailItem item : mailList.getItems()) {
                         if (!ids.contains(item.messageId())) updated.add(item);
                     }
-                    mailList.setItems(FXCollections.observableArrayList(updated.subList(0, Math.min(PAGE_SIZE, updated.size()))));
+                    allInbox.setAll(updated.subList(0, Math.min(PAGE_SIZE, updated.size()))); refreshMailFilter();
                 }
             }
         });
