@@ -35,6 +35,11 @@ public final class MailFxApp extends Application {
         t.setDaemon(true);
         return t;
     });
+    private final ExecutorService cacheWorkers = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "mail-cache-worker");
+        t.setDaemon(true);
+        return t;
+    });
     private final BorderPane root = new BorderPane();
     private final Label accountLabel = new Label();
     private final Label status = new Label("Sẵn sàng");
@@ -420,13 +425,15 @@ public final class MailFxApp extends Application {
             @Override protected List<MailItem> call() throws Exception {
                 List<MailItem> items = imap ? new ImapService().inbox(acc, offset, PAGE_SIZE)
                                             : new Pop3Service().inbox(acc, offset, PAGE_SIZE);
-                MailDatabase db = new MailDatabase();
-                if (db.enabled()) {
-                    for (MailItem item : items) {
-                        try { db.save(acc, "RECEIVED", item); }
-                        catch (Exception ex) { System.err.println("MySQL: " + ex.getMessage()); break; }
-                    }
-                }
+                cacheWorkers.submit(() -> {
+                    try {
+                        MailDatabase db = new MailDatabase();
+                        if (db.enabled()) for (MailItem item : items) {
+                            try { db.save(acc, "RECEIVED", item); }
+                            catch (Exception ex) { System.err.println("MySQL: " + ex.getMessage()); break; }
+                        }
+                    } catch (Exception ex) { System.err.println("MySQL cache: " + ex.getMessage()); }
+                });
                 return items;
             }
         };
