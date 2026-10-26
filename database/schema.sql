@@ -28,3 +28,15 @@ CREATE TABLE IF NOT EXISTS mail_messages (
   INDEX idx_message_id (message_id(191))
 );
 -- Do not store email passwords or application passwords in this database.
+
+-- Drafts are stored separately because mail_messages.direction only covers sent/received.
+CREATE TABLE IF NOT EXISTS mail_drafts (
+  id VARCHAR(36) NOT NULL PRIMARY KEY,
+  account_id BIGINT NOT NULL,
+  recipients TEXT,
+  subject VARCHAR(998),
+  body MEDIUMTEXT,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_draft_account (account_id),
+  CONSTRAINT fk_draft_account FOREIGN KEY (account_id) REFERENCES mail_accounts(id) ON DELETE CASCADE
+);
