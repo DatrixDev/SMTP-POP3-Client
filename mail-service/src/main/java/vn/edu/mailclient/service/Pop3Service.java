@@ -73,9 +73,19 @@ public final class Pop3Service {
         catch (Exception ex) { return value; }
     }
 
+    private static String htmlToText(String html) {
+        return html.replaceAll("(?is)<(script|style)[^>]*>.*?</\\1>", "")
+                .replaceAll("(?i)<br\\s*/?>", "\\n")
+                .replaceAll("(?i)</(p|div|tr|li)>", "\\n")
+                .replaceAll("(?s)<[^>]+>", " ")
+                .replace("&nbsp;", " ").replace("&amp;", "&")
+                .replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\\"")
+                .replaceAll("[ \\t]+", " ").trim();
+    }
+
     private static String extractText(Part part) throws MessagingException, IOException {
         if (part.isMimeType("text/plain")) return Objects.toString(part.getContent(), "");
-        if (part.isMimeType("text/html")) return "[HTML email]\n" + Objects.toString(part.getContent(), "");
+        if (part.isMimeType("text/html")) return htmlToText(Objects.toString(part.getContent(), ""));
         if (part.isMimeType("multipart/*")) {
             Object content = part.getContent();
             if (content instanceof MimeMultipart multi) {
