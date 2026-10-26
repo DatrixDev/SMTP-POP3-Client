@@ -163,7 +163,7 @@ public final class MailFxApp extends Application {
             case "compose" -> composePage();
             case "starred" -> inboxPage();
             case "sent" -> sentPage();
-            case "drafts" -> draftsPage();
+            case "drafts" -> mysqlDraftsPage();
             case "categories" -> inboxPage();
             case "settings" -> settingsPage();
             case "lan" -> lanPage();
@@ -376,6 +376,49 @@ public final class MailFxApp extends Application {
     private String decodeLocal(String encoded) {
         return new String(java.util.Base64.getDecoder().decode(encoded),java.nio.charset.StandardCharsets.UTF_8);
     }
+    private Pane mysqlDraftsPage() {
+        VBox wrapper = new VBox(12);
+        wrapper.setPadding(new Insets(16, 22, 16, 22));
+        VBox heading = page("Thư nháp", "Thư nháp lưu trên MySQL");
+        VBox entries = new VBox(2);
+        Label loading = new Label("Đang tải thư nháp từ MySQL...");
+        entries.getChildren().add(loading);
+        ScrollPane scroll = new ScrollPane(entries);
+        scroll.setFitToWidth(true);
+        VBox.setVgrow(scroll, Priority.ALWAYS);
+        wrapper.getChildren().addAll(heading, scroll);
+        VBox.setVgrow(scroll, Priority.ALWAYS);
+        final MailAccount acc;
+        try { acc = account(); }
+        catch (Exception ex) { entries.getChildren().setAll(new Label("Chưa cấu hình tài khoản: " + ex.getMessage())); return wrapper; }
+        Task<java.util.List<MailItem>> task = new Task<>() {
+            @Override protected java.util.List<MailItem> call() throws Exception {
+                return new MailDatabase().drafts(acc);
+            }
+        };
+        task.setOnSucceeded(e -> {
+            entries.getChildren().clear();
+            java.util.List<MailItem> drafts = task.getValue();
+            if (drafts.isEmpty()) { entries.getChildren().add(new Label("Chưa có thư nháp trong MySQL.")); return; }
+            for (MailItem draft : drafts) {
+                Label label = new Label((draft.subject() == null || draft.subject().isBlank() ? "(Không có tiêu đề)" : draft.subject())
+                    + "  —  " + draft.to());
+                label.setMaxWidth(Double.MAX_VALUE);
+                HBox.setHgrow(label, Priority.ALWAYS);
+                Button edit = iconButton("✎", "Tiếp tục soạn");
+                edit.setOnAction(ev -> showComposeWith(draft.to(), draft.subject(), draft.body()));
+                HBox line = new HBox(12, label, edit);
+                line.setPadding(new Insets(12));
+                line.setStyle("-fx-background-color: white; -fx-border-color: #edf0f3; -fx-border-width: 0 0 1 0;");
+                entries.getChildren().add(line);
+            }
+        });
+        task.setOnFailed(e -> entries.getChildren().setAll(new Label(
+            "Không đọc được thư nháp MySQL: " + task.getException().getMessage())));
+        cacheWorkers.submit(task);
+        return wrapper;
+    }
+
     private Pane localFolderPage(String folder,String title) {
         VBox heading=page(title,folder.equals("sent")?"Thư đã gửi qua SMTP":"Thư nháp của bạn");
         VBox entries=new VBox(1);entries.setPadding(new Insets(0,22,20,22));
@@ -487,7 +530,7 @@ public final class MailFxApp extends Application {
             status.setText("Đã cập nhật hộp thư");
             if (!items.isEmpty()) mailList.getSelectionModel().selectFirst();
         });
-        task.setOnFailed(e -> { refresh.setDisable(false); status.setText("Tải email thất bại"); error(task.getException()); });
+        task.setOnFailed(e -> { if (refresh != null) refresh.setDisable(false); status.setText("Tải email thất bại"); error(task.getException()); });
         workers.submit(task);
     }
 
