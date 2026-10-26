@@ -100,6 +100,17 @@ public final class MailDatabase {
                                     update.executeUpdate();
                                 }
                             }
+                            Timestamp existingDate = sentTimestamp(item.sentAt());
+                            if (hasId && existingDate != null) {
+                                try (PreparedStatement updateDate = c.prepareStatement(
+                                        "UPDATE mail_messages SET sent_at=? WHERE account_id=? AND direction='RECEIVED' " +
+                                        "AND message_id=? AND sent_at IS NULL")) {
+                                    updateDate.setTimestamp(1, existingDate);
+                                    updateDate.setLong(2, id);
+                                    updateDate.setString(3, item.messageId());
+                                    updateDate.executeUpdate();
+                                }
+                            }
                             return;
                         }
                     }
