@@ -131,7 +131,7 @@ public final class MailServer {
         }
     }
     public static void main(String[] args) throws Exception {
-        url=env("MAIL_DB_URL","jdbc:mysql://127.0.0.1:3307/smtp_pop3_client");
+        url="jdbc:mysql://127.0.0.1:"+env("MYSQL_PORT","3307")+"/smtp_pop3_client";
         user=env("MYSQL_USER","mailapp");
         pass=env("MYSQL_PASSWORD","");
         String bind=env("LAN_BIND","127.0.0.1");
