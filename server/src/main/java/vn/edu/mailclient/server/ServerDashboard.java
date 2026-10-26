@@ -17,7 +17,36 @@ public final class ServerDashboard {
     private final DefaultTableModel mail=new DefaultTableModel(new String[]{"ID","Người gửi","Người nhận","Chủ đề","Thời gian"},0);
     private final JTextArea events=new JTextArea();
     private final String url,user,password;
+    private LocalMailProtocols protocols;
+    private int smtpPort=2525,popPort=2110;
+    private final JLabel serverStatus=new JLabel("Đã dừng");
+    private JButton startButton,stopButton;
     public ServerDashboard(String url,String user,String password){this.url=url;this.user=user;this.password=password;}
+    public void configureProtocols(LocalMailProtocols protocols,int smtpPort,int popPort) {
+        this.protocols=protocols;
+        this.smtpPort=smtpPort;
+        this.popPort=popPort;
+    }
+    private void updateServerStatus() {
+        boolean running=protocols!=null&&protocols.isRunning();
+        serverStatus.setText(running?"● Đang chạy":"● Đã dừng");
+        serverStatus.setForeground(running?new Color(22,125,64):new Color(175,55,55));
+        if(startButton!=null)startButton.setEnabled(!running);
+        if(stopButton!=null)stopButton.setEnabled(running);
+    }
+    private void changeServerState(boolean start) {
+        if(protocols==null) {log("Server chưa được cấu hình");return;}
+        if(startButton!=null)startButton.setEnabled(false);
+        if(stopButton!=null)stopButton.setEnabled(false);
+        new Thread(()->{
+            try {
+                if(start)protocols.start(smtpPort,popPort);
+                else protocols.stop();
+                log(start?"SMTP/POP3 started":"SMTP/POP3 stopped");
+            } catch(Exception ex) {error(ex);}
+            finally {SwingUtilities.invokeLater(this::updateServerStatus);}
+        },"server-lifecycle").start();
+    }
     private Connection db()throws SQLException{return DriverManager.getConnection(url,user,password);}
     public void log(String message){SwingUtilities.invokeLater(()->{events.append(message+"\n");events.setCaretPosition(events.getDocument().getLength());});}
     public void show(){
@@ -35,7 +64,7 @@ public final class ServerDashboard {
             events.setEditable(false);events.setFont(new Font("Monospaced",Font.PLAIN,13));tabs.addTab("Nhật ký",new JScrollPane(events));
             frame.add(header,BorderLayout.NORTH);frame.add(tabs,BorderLayout.CENTER);
             frame.getContentPane().setBackground(new Color(244,247,252));
-            frame.setVisible(true);refresh();
+            frame.setVisible(true);updateServerStatus();refresh();
         });
     }
     private JPanel overview(){
@@ -49,7 +78,12 @@ public final class ServerDashboard {
             "Đây là server thực hành, KHÔNG mở cổng ra Internet.");
         info.setEditable(false);info.setOpaque(false);info.setFont(new Font("SansSerif",Font.PLAIN,17));info.setLineWrap(true);info.setWrapStyleWord(true);
         p.add(info,BorderLayout.CENTER);
-        JButton refresh=button("↻  Làm mới dữ liệu");refresh.addActionListener(e->refresh());p.add(refresh,BorderLayout.SOUTH);return p;
+        JPanel controls=new JPanel(new FlowLayout(FlowLayout.LEFT,12,8));
+        startButton=button("▶  Bật SMTP/POP3");startButton.addActionListener(e->changeServerState(true));
+        stopButton=button("■  Tắt SMTP/POP3");stopButton.addActionListener(e->changeServerState(false));
+        JButton refresh=button("↻  Làm mới dữ liệu");refresh.addActionListener(e->{refresh();updateServerStatus();});
+        controls.add(serverStatus);controls.add(startButton);controls.add(stopButton);controls.add(refresh);
+        p.add(controls,BorderLayout.SOUTH);updateServerStatus();return p;
     }
     private JPanel accountPanel(){
         JPanel p=new JPanel(new BorderLayout(12,12));p.setBorder(BorderFactory.createEmptyBorder(18,18,18,18));
