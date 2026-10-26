@@ -65,6 +65,7 @@ public final class MailFxApp extends Application {
     private long bodyRequestSequence = 0;
     private boolean showStarredOnly = false;
     private boolean showUnreadOnly = false;
+    private String selectedCategory = "Tất cả";
     private String lanToken;
     private String lanUser;
     private Stage stage;
@@ -127,7 +128,7 @@ public final class MailFxApp extends Application {
         starredNav=nav("☆    Có gắn sao","starred");
         sentNav=nav("➤    Đã gửi","sent");
         draftNav=nav("▤    Thư nháp","drafts");
-        categoriesNav=nav("⌄    Chưa đọc","categories");
+        categoriesNav=nav("⌄    Danh mục","categories");
         lanNav=nav("◉    Mail nội bộ LAN","lan");
         settingsNav=nav("⚙    Cài đặt SMTP / POP3","settings");
         Label folders=new Label("Nhãn");folders.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #444746;");
@@ -158,13 +159,14 @@ public final class MailFxApp extends Application {
             for (var entry : navigation.entrySet()) highlight(entry.getValue(),entry.getKey().equals(page));
         }
         if (!page.equals("starred")) showStarredOnly=false;
-        showUnreadOnly = "categories".equals(page);
+        showUnreadOnly = false;
+        if (!"categories".equals(page)) selectedCategory = "Tất cả";
         root.setCenter(switch (page) {
             case "compose" -> composePage();
             case "starred" -> inboxPage();
             case "sent" -> sentPage();
             case "drafts" -> mysqlDraftsPage();
-            case "categories" -> inboxPage();
+            case "categories" -> categoryPage();
             case "settings" -> settingsPage();
             case "lan" -> lanPage();
             default -> inboxPage();
@@ -190,6 +192,31 @@ public final class MailFxApp extends Application {
         VBox pane = new VBox(8, title, sub);
         pane.setPadding(new Insets(25));
         return pane;
+    }
+
+    private String categoryOf(MailItem item) {
+        String sender = item.from().toLowerCase(java.util.Locale.ROOT);
+        String subject = item.subject().toLowerCase(java.util.Locale.ROOT);
+        if (sender.contains("noreply") || sender.contains("no-reply") || subject.contains("mã xác nhận")
+                || subject.contains("verification") || subject.contains("security")) return "Thông báo";
+        if (subject.contains("sale") || subject.contains("discount") || subject.contains("khuyến mãi")
+                || subject.contains("ưu đãi") || subject.contains("promotion")) return "Quảng cáo";
+        if (subject.contains("invoice") || subject.contains("receipt") || subject.contains("hóa đơn")
+                || subject.contains("đơn hàng")) return "Giao dịch";
+        return "Chính";
+    }
+
+    private Pane categoryPage() {
+        VBox page = new VBox(10);
+        page.setPadding(new Insets(12, 20, 12, 10));
+        ComboBox<String> choices = new ComboBox<>(FXCollections.observableArrayList(
+            "Tất cả", "Chính", "Thông báo", "Quảng cáo", "Giao dịch", "Chưa đọc"));
+        choices.setValue(selectedCategory);
+        choices.setOnAction(e -> { selectedCategory = choices.getValue(); refreshMailFilter(); });
+        page.getChildren().addAll(new Label("Lọc email theo danh mục (quy tắc trên máy)"), choices, inboxPage());
+        VBox.setVgrow(page.getChildren().get(2), Priority.ALWAYS);
+        refreshMailFilter();
+        return page;
     }
 
     private Pane inboxPage() {
@@ -344,7 +371,9 @@ public final class MailFxApp extends Application {
         mailList.setItems(allInbox.filtered(item -> {
             boolean matches = query.isBlank() || (item.from()+" "+item.to()+" "+item.subject()+" "+item.body()).toLowerCase(java.util.Locale.ROOT).contains(query);
             return matches && (!showStarredOnly || starred.contains(mailKey(item)))
-                    && (!showUnreadOnly || !readMessages.contains(mailKey(item)));
+                    && ("Tất cả".equals(selectedCategory) ||
+                        ("Chưa đọc".equals(selectedCategory) ? !readMessages.contains(mailKey(item)) :
+                            selectedCategory.equals(categoryOf(item))));
         }));
         mailList.refresh();
     }
