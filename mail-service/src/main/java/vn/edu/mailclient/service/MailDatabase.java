@@ -88,4 +88,51 @@ public final class MailDatabase {
             }
         }
     }
+    /** Store drafts independently of SMTP SENT/RECEIVED history. */
+    public void saveDraft(MailAccount account, String draftId, String recipient, String subject, String body) throws SQLException {
+        if (!enabled()) return;
+        try (Connection c = connect()) {
+            long accountId = accountId(c, account);
+            try (Statement statement = c.createStatement()) {
+                statement.executeUpdate("CREATE TABLE IF NOT EXISTS mail_drafts (" +
+                    "id VARCHAR(36) NOT NULL, account_id BIGINT NOT NULL, recipients TEXT, subject VARCHAR(998), " +
+                    "body MEDIUMTEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, " +
+                    "PRIMARY KEY (id), INDEX idx_draft_account (account_id))");
+            }
+            try (PreparedStatement statement = c.prepareStatement(
+                    "INSERT INTO mail_drafts(id,account_id,recipients,subject,body) VALUES(?,?,?,?,?) " +
+                    "ON DUPLICATE KEY UPDATE recipients=VALUES(recipients),subject=VALUES(subject),body=VALUES(body)")) {
+                statement.setString(1, draftId);
+                statement.setLong(2, accountId);
+                statement.setString(3, recipient);
+                statement.setString(4, subject);
+                statement.setString(5, body);
+                statement.executeUpdate();
+            }
+        }
+    }
+
+    public java.util.List<MailItem> drafts(MailAccount account) throws SQLException {
+        java.util.List<MailItem> drafts = new java.util.ArrayList<>();
+        if (!enabled()) return drafts;
+        try (Connection c = connect()) {
+            long accountId = accountId(c, account);
+            try (Statement statement = c.createStatement()) {
+                statement.executeUpdate("CREATE TABLE IF NOT EXISTS mail_drafts (" +
+                    "id VARCHAR(36) NOT NULL, account_id BIGINT NOT NULL, recipients TEXT, subject VARCHAR(998), " +
+                    "body MEDIUMTEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, " +
+                    "PRIMARY KEY (id), INDEX idx_draft_account (account_id))");
+            }
+            try (PreparedStatement statement = c.prepareStatement(
+                    "SELECT id,recipients,subject,body,updated_at FROM mail_drafts WHERE account_id=? ORDER BY updated_at DESC")) {
+                statement.setLong(1, accountId);
+                try (ResultSet rs = statement.executeQuery()) {
+                    while (rs.next()) drafts.add(new MailItem(0, rs.getString(1), account.email(),
+                        rs.getString(2), rs.getString(3), rs.getString(4), String.valueOf(rs.getTimestamp(5))));
+                }
+            }
+        }
+        return drafts;
+    }
+
 }
