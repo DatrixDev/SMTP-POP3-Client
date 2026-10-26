@@ -140,6 +140,10 @@ public final class MailServer {
             s.executeUpdate("CREATE TABLE IF NOT EXISTS lan_users (username VARCHAR(40) PRIMARY KEY,password_salt VARCHAR(64) NOT NULL,password_hash VARCHAR(128) NOT NULL)");
             s.executeUpdate("CREATE TABLE IF NOT EXISTS lan_messages (id BIGINT AUTO_INCREMENT PRIMARY KEY,sender VARCHAR(40) NOT NULL,recipient VARCHAR(40) NOT NULL,subject VARCHAR(500),body TEXT,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(sender) REFERENCES lan_users(username),FOREIGN KEY(recipient) REFERENCES lan_users(username))");
         }
+        ServerDashboard dashboard=new ServerDashboard(url,user,pass);
+        LocalMailProtocols protocols=new LocalMailProtocols(url,user,pass,dashboard::log);
+        protocols.start(Integer.parseInt(env("LOCAL_SMTP_PORT","2525")),Integer.parseInt(env("LOCAL_POP3_PORT","2110")));
+        if(!java.awt.GraphicsEnvironment.isHeadless())dashboard.show();
         try(DatagramSocket socket=new DatagramSocket(new InetSocketAddress(bind,port))) {
             System.out.println("Mail LAN UDP server: "+bind+":"+port);
             byte[] buffer=new byte[60000];
