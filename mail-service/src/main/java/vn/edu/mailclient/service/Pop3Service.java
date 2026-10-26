@@ -22,8 +22,13 @@ public final class Pop3Service {
         props.put("mail.pop3s.connectiontimeout", "10000");
         props.put("mail.pop3s.timeout", "20000");
         props.put("mail.pop3s.writetimeout", "20000");
+        boolean local = account.popHost().equalsIgnoreCase("localhost") || account.popHost().equals("127.0.0.1");
+        if (local) {
+            props.put("mail.pop3.connectiontimeout", "10000");
+            props.put("mail.pop3.timeout", "20000");
+        }
         Session session = Session.getInstance(props);
-        try (StoreHolder holder = new StoreHolder(session.getStore("pop3s"))) {
+        try (StoreHolder holder = new StoreHolder(session.getStore(local ? "pop3" : "pop3s"))) {
             holder.store.connect(account.popHost(), account.popPort(), account.email(), account.password());
             Folder folder = holder.store.getFolder("INBOX");
             if (folder == null) throw new MessagingException("INBOX not available");
