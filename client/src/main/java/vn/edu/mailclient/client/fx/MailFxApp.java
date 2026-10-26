@@ -379,6 +379,7 @@ public final class MailFxApp extends Application {
     }
     private void showMessageDialog(MailItem item) {
         readMessages.add(mailKey(item));
+        mailFlags.putBoolean("read." + Integer.toHexString(mailKey(item).hashCode()), true);
         Dialog<Void> dialog = new Dialog<>();dialog.setTitle(item.subject().isBlank()?"Thư":item.subject());
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
         dialog.getDialogPane().setPrefSize(900,660);
@@ -386,7 +387,7 @@ public final class MailFxApp extends Application {
         Label from = new Label(item.from());from.setStyle("-fx-font-weight: bold; -fx-font-size: 14px;");
         Label to = new Label("Đến: "+item.to());to.setStyle("-fx-text-fill: #5f6368;");
         Label date = new Label(item.sentAt());date.setStyle("-fx-text-fill: #5f6368;");
-        TextArea body = new TextArea(item.body());body.setWrapText(true);body.setEditable(false);
+        TextArea body = new TextArea(popBodyCache.getOrDefault(mailKey(item), item.body()));body.setWrapText(true);body.setEditable(false);
         body.setStyle("-fx-control-inner-background: white; -fx-font-size: 14px;");
         VBox.setVgrow(body,Priority.ALWAYS);
         VBox content = new VBox(18,title,new Separator(),new HBox(12,from,date),to,body);
