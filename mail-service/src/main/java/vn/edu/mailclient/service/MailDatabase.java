@@ -55,6 +55,19 @@ public final class MailDatabase {
         }
         throw new SQLException("Cannot find mail account");
     }
+    private static Timestamp sentTimestamp(String value) {
+        if (value == null || value.isBlank()) return null;
+        try {
+            java.time.ZonedDateTime date = java.time.ZonedDateTime.parse(
+                value, java.time.format.DateTimeFormatter.ofPattern("EEE MMM dd HH:mm:ss zzz yyyy", java.util.Locale.ENGLISH));
+            return Timestamp.from(date.toInstant());
+        } catch (java.time.format.DateTimeParseException ignored) {}
+        try { return Timestamp.from(java.time.Instant.parse(value)); }
+        catch (java.time.format.DateTimeParseException ignored) {}
+        try { return Timestamp.valueOf(value); }
+        catch (IllegalArgumentException ignored) {}
+        return null;
+    }
     public void save(MailAccount account, String direction, MailItem item) throws SQLException {
         if (!enabled()) return;
         try (Connection c = connect()) {
@@ -93,10 +106,13 @@ public final class MailDatabase {
                 }
             }
             try (PreparedStatement s = c.prepareStatement(
-                    "INSERT INTO mail_messages(account_id,direction,message_id,sender,recipients,subject,body) VALUES(?,?,?,?,?,?,?)")) {
+                    "INSERT INTO mail_messages(account_id,direction,message_id,sender,recipients,subject,body,sent_at) VALUES(?,?,?,?,?,?,?,?)")) {
                 s.setLong(1, id); s.setString(2, direction); s.setString(3, item.messageId());
                 s.setString(4, item.from()); s.setString(5, item.to()); s.setString(6, item.subject());
-                s.setString(7, item.body()); s.executeUpdate();
+                s.setString(7, item.body());
+                Timestamp sent = sentTimestamp(item.sentAt());
+                if (sent == null) s.setNull(8, Types.TIMESTAMP); else s.setTimestamp(8, sent);
+                s.executeUpdate();
             }
         }
     }
