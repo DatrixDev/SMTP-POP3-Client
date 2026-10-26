@@ -79,7 +79,7 @@ public final class Pop3Service {
                 .replaceAll("(?i)</(p|div|tr|li)>", "\\n")
                 .replaceAll("(?s)<[^>]+>", " ")
                 .replace("&nbsp;", " ").replace("&amp;", "&")
-                .replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\\"")
+                .replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", String.valueOf((char) 34))
                 .replaceAll("[ \\t]+", " ").trim();
     }
 
