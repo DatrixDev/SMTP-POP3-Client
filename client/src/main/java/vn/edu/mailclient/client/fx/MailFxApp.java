@@ -204,7 +204,7 @@ public final class MailFxApp extends Application {
                 sender.setPrefWidth(195);sender.setMinWidth(195);
                 sender.setStyle("-fx-text-fill: #202124; -fx-font-weight: bold; -fx-font-size: 13px;");
                 Label preview = new Label((item.subject().isBlank() ? "(Không có tiêu đề)" : item.subject())+
-                    "  -  "+item.body().replace('\\n',' ').replace('\\r',' '));
+                    "  -  "+item.body().replace('\n',' ').replace('\r',' '));
                 preview.setTextOverrun(OverrunStyle.ELLIPSIS);preview.setMaxWidth(Double.MAX_VALUE);
                 HBox.setHgrow(preview,Priority.ALWAYS);
                 preview.setStyle("-fx-text-fill: #202124; -fx-font-size: 13px;");
