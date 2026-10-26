@@ -71,7 +71,7 @@ public final class MailFxApp extends Application {
         root.setTop(header());
         root.setLeft(sidebar());
         root.setBottom(footer());
-        root.setStyle("-fx-background-color: #f3f6fb;");
+        root.setStyle("-fx-background-color: #f6f8fc;");
         Scene scene = new Scene(root, 1280, 800);
         stage.setScene(scene);
         stage.setMinWidth(980); stage.setMinHeight(640);
@@ -84,21 +84,21 @@ public final class MailFxApp extends Application {
     }
 
     private HBox header() {
-        Label logo = new Label("✉  SMTP / POP3 Mail");
+        Label logo = new Label("✉  Mail");
         logo.setFont(Font.font("System", FontWeight.BOLD, 23)); logo.setTextFill(Color.WHITE);
         Label mark = new Label("●  SMTP + POP3");
-        mark.setTextFill(Color.web("#65e6b0")); mark.setStyle("-fx-font-weight: bold;");
+        mark.setTextFill(Color.web("#188038")); mark.setStyle("-fx-font-weight: bold;");
         accountLabel.setTextFill(Color.WHITE);
         HBox right = new HBox(18, mark, accountLabel); right.setAlignment(Pos.CENTER_RIGHT);
         Region space = new Region(); HBox.setHgrow(space, Priority.ALWAYS);
         HBox h = new HBox(20, logo, space, right);
         h.setAlignment(Pos.CENTER_LEFT); h.setPadding(new Insets(20, 28, 20, 28));
-        h.setStyle("-fx-background-color: #0c2b59;");
+        h.setStyle("-fx-background-color: #f6f8fc;");
         return h;
     }
 
     private VBox sidebar() {
-        Label section = new Label("HỘP THƯ"); section.setTextFill(Color.web("#a9c5e6"));
+        Label section = new Label("HỘP THƯ"); section.setTextFill(Color.web("#5f6368"));
         section.setStyle("-fx-font-weight: bold;");
         inboxNav = nav("▣   Hộp thư đến", "inbox");
         composeNav = nav("✎   Soạn thư mới", "compose");
@@ -106,14 +106,14 @@ public final class MailFxApp extends Application {
         lanNav = nav("◉   Mail nội bộ LAN", "lan");
         VBox side = new VBox(12, section, inboxNav, composeNav, lanNav, settingsNav);
         side.setPadding(new Insets(28, 14, 20, 14)); side.setPrefWidth(235);
-        side.setStyle("-fx-background-color: #0c2b59;");
+        side.setStyle("-fx-background-color: #f6f8fc;");
         return side;
     }
 
     private Button nav(String label, String page) {
         Button b = new Button(label);
         b.setMaxWidth(Double.MAX_VALUE); b.setAlignment(Pos.CENTER_LEFT);
-        b.setStyle("-fx-background-color: transparent; -fx-text-fill: white; -fx-font-size: 14px; -fx-font-weight: bold; -fx-padding: 15 14;");
+        b.setStyle("-fx-background-color: transparent; -fx-text-fill: #202124; -fx-font-size: 14px; -fx-font-weight: bold; -fx-padding: 15 14;");
         b.setOnAction(e -> showPage(page));
         return b;
     }
@@ -134,8 +134,8 @@ public final class MailFxApp extends Application {
     }
 
     private void highlight(Button button, boolean active) {
-        button.setStyle("-fx-background-color: " + (active ? "#1677f2" : "transparent")
-                + "; -fx-background-radius: 9; -fx-text-fill: white; -fx-font-size: 14px; -fx-font-weight: bold; -fx-padding: 15 14;");
+        button.setStyle("-fx-background-color: " + (active ? "#d3e3fd" : "transparent")
+                + "; -fx-background-radius: 9; -fx-text-fill: #202124; -fx-font-size: 14px; -fx-font-weight: bold; -fx-padding: 15 14;");
     }
 
     private VBox page(String heading, String description) {
@@ -148,7 +148,7 @@ public final class MailFxApp extends Application {
     }
 
     private Pane inboxPage() {
-        VBox wrapper = page("Hộp thư đến", "Đọc thư trực tiếp từ Gmail qua giao thức POP3");
+        VBox wrapper = page("Hộp thư đến", "Nhận thư từ Gmail hoặc localhost qua POP3");
         if (receiveMode.getValue() == null) receiveMode.getSelectionModel().selectFirst();
         receiveMode.setOnAction(e -> { inboxOffset = 0; inboxCount.setText("Nhấn Làm mới để tải thư qua " + receiveMode.getValue()); });
         Button refresh = primary("↻  Làm mới");
@@ -429,12 +429,24 @@ public final class MailFxApp extends Application {
                 + "Thay đổi tại đây chỉ áp dụng đến khi đóng ứng dụng.\n"
                 + "Muốn lưu cho lần chạy sau, hãy sửa .env ở thư mục gốc.");
         hint.setTextFill(Color.web("#687b97"));
+        Button localPreset = primary("Dùng localhost");
+        localPreset.setOnAction(e -> {
+            smtpHost.setText("127.0.0.1"); smtpPort.setText("2525");
+            popHost.setText("127.0.0.1"); popPort.setText("2110");
+            email.setText("alice@localhost"); password.clear();
+            status.setText("Tạo tài khoản trên Server Dashboard rồi nhập mật khẩu");
+        });
+        Button gmailPreset = new Button("Dùng Gmail");
+        gmailPreset.setOnAction(e -> {
+            smtpHost.setText("smtp.gmail.com"); smtpPort.setText("587");
+            popHost.setText("pop.gmail.com"); popPort.setText("995");
+        });
         Button apply = primary("✓  Áp dụng");
         apply.setOnAction(e -> {
             try { MailAccount acc = account(); accountLabel.setText(acc.email()); showPage("inbox"); }
             catch (Exception ex) { error(ex); }
         });
-        VBox card = new VBox(25, grid, hint, apply);
+        VBox card = new VBox(25, new HBox(12, localPreset, gmailPreset), grid, hint, apply);
         card.setPadding(new Insets(26)); card.setStyle(cardStyle());
         VBox outer = new VBox(18, page, card); outer.setPadding(new Insets(0, 28, 28, 28));
         return outer;
@@ -460,7 +472,7 @@ public final class MailFxApp extends Application {
         Region spacer = new Region(); HBox.setHgrow(spacer, Priority.ALWAYS);
         HBox bar = new HBox(status, spacer, right);
         bar.setPadding(new Insets(11, 25, 11, 25));
-        bar.setStyle("-fx-background-color: #0c2b59;");
+        bar.setStyle("-fx-background-color: #f6f8fc;");
         return bar;
     }
 
