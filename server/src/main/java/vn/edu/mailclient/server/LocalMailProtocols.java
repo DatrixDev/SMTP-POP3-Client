@@ -13,25 +13,65 @@ import javax.crypto.spec.PBEKeySpec;
 /** Loopback-only teaching SMTP/POP3 server backed by MySQL. No Internet relay. */
 public final class LocalMailProtocols {
     private final String url, user, password;
+    private final java.util.List<ServerSocket> listeners = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final java.util.Set<Socket> clients = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private volatile boolean running;
     private final ExecutorService workers=Executors.newCachedThreadPool(r->{Thread t=new Thread(r,"mail-protocol-worker");t.setDaemon(true);return t;});
     private final java.util.function.Consumer<String> log;
     public LocalMailProtocols(String url,String user,String password,java.util.function.Consumer<String> log) {
         this.url=url;this.user=user;this.password=password;this.log=log;
     }
     private Connection db() throws SQLException {return DriverManager.getConnection(url,user,password);}
-    public void start(int smtpPort,int popPort) throws Exception {
-        try(Connection c=db();Statement s=c.createStatement()){
-            s.executeUpdate("CREATE TABLE IF NOT EXISTS local_mail (id BIGINT AUTO_INCREMENT PRIMARY KEY, recipient VARCHAR(40) NOT NULL, sender VARCHAR(320) NOT NULL, raw_message MEDIUMTEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX(recipient))");
+    public synchronized void start(int smtpPort,int popPort) throws Exception {
+        if (running) return;
+        try(Connection c=db();Statement st=c.createStatement()){
+            st.executeUpdate("CREATE TABLE IF NOT EXISTS local_mail (id BIGINT AUTO_INCREMENT PRIMARY KEY, recipient VARCHAR(40) NOT NULL, sender VARCHAR(320) NOT NULL, raw_message MEDIUMTEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX(recipient))");
         }
-        serve(smtpPort,true);serve(popPort,false);
+        ServerSocket smtp = new ServerSocket();
+        ServerSocket pop = new ServerSocket();
+        try {
+            smtp.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(),smtpPort));
+            pop.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(),popPort));
+            listeners.add(smtp);
+            listeners.add(pop);
+            running = true;
+            serve(smtp,true);
+            serve(pop,false);
+        } catch(Exception ex) {
+            try { smtp.close(); } catch(IOException ignored) {}
+            try { pop.close(); } catch(IOException ignored) {}
+            listeners.clear();
+            running = false;
+            throw ex;
+        }
     }
-    private void serve(int port,boolean smtp) throws IOException {
-        ServerSocket server=new ServerSocket();
-        server.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(),port));
+    public synchronized void stop() {
+        if (!running) return;
+        running = false;
+        for (ServerSocket listener : listeners) {
+            try { listener.close(); } catch(IOException ignored) {}
+        }
+        listeners.clear();
+        for (Socket client : clients) {
+            try { client.close(); } catch(IOException ignored) {}
+        }
+        clients.clear();
+        log.accept("SMTP/POP3 stopped");
+    }
+    public boolean isRunning() { return running; }
+    private void serve(ServerSocket server,boolean smtp) {
         workers.execute(()->{
-            log.accept((smtp?"SMTP":"POP3")+" localhost:"+port+" ready");
-            while(!server.isClosed())try {Socket socket=server.accept();workers.execute(()->handle(socket,smtp));}
-            catch(IOException ex){if(!server.isClosed())log.accept("Listener error: "+ex.getMessage());}
+            log.accept((smtp?"SMTP":"POP3")+" localhost:"+server.getLocalPort()+" ready");
+            while(running&&!server.isClosed()) try {
+                Socket socket=server.accept();
+                clients.add(socket);
+                workers.execute(()->{
+                    try { handle(socket,smtp); }
+                    finally { clients.remove(socket); }
+                });
+            } catch(IOException ex) {
+                if(running&&!server.isClosed()) log.accept("Listener error: "+ex.getMessage());
+            }
         });
     }
     private void handle(Socket socket,boolean smtp) {
