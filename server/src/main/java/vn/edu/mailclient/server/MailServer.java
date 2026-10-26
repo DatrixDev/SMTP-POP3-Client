@@ -142,7 +142,11 @@ public final class MailServer {
         }
         ServerDashboard dashboard=new ServerDashboard(url,user,pass);
         LocalMailProtocols protocols=new LocalMailProtocols(url,user,pass,dashboard::log);
-        protocols.start(Integer.parseInt(env("LOCAL_SMTP_PORT","2525")),Integer.parseInt(env("LOCAL_POP3_PORT","2110")));
+        int smtpPort=Integer.parseInt(env("LOCAL_SMTP_PORT","2525"));
+        int popPort=Integer.parseInt(env("LOCAL_POP3_PORT","2110"));
+        dashboard.configureProtocols(protocols,smtpPort,popPort);
+        protocols.start(smtpPort,popPort);
+        Runtime.getRuntime().addShutdownHook(new Thread(protocols::stop,"mail-server-shutdown"));
         if(!java.awt.GraphicsEnvironment.isHeadless())dashboard.show();
         try(DatagramSocket socket=new DatagramSocket(new InetSocketAddress(bind,port))) {
             System.out.println("Mail LAN UDP server: "+bind+":"+port);
