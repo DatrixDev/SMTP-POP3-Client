@@ -90,7 +90,7 @@ public final class MailFxApp extends Application {
 
     private HBox header() {
         Label menu = new Label("☰");menu.setStyle("-fx-font-size: 21px; -fx-text-fill: #5f6368;");
-        Label logo = new Label("✉ Gmail");logo.setFont(Font.font("System",FontWeight.NORMAL,25));
+        Label logo = new Label("✉ Mail");logo.setFont(Font.font("System",FontWeight.NORMAL,25));
         logo.setTextFill(Color.web("#202124"));
         searchField.setPromptText("⌕   Tìm kiếm trong thư");
         searchField.setPrefWidth(570);searchField.setPrefHeight(46);
@@ -245,12 +245,12 @@ public final class MailFxApp extends Application {
         return item.messageId().isBlank() ? item.from()+"|"+item.subject()+"|"+item.sentAt() : item.messageId();
     }
     private void refreshMailFilter() {
-        if (allInbox.isEmpty() && !mailList.getItems().isEmpty()) allInbox.setAll(mailList.getItems());
         String query = searchField.getText().trim().toLowerCase(java.util.Locale.ROOT);
         mailList.setItems(allInbox.filtered(item -> {
             boolean matches = query.isBlank() || (item.from()+" "+item.to()+" "+item.subject()+" "+item.body()).toLowerCase(java.util.Locale.ROOT).contains(query);
             return matches && (!showStarredOnly || starred.contains(mailKey(item)));
         }));
+        mailList.refresh();
     }
     private void showMessageDialog(MailItem item) {
         readMessages.add(mailKey(item));
