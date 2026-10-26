@@ -14,7 +14,10 @@ public final class SmtpService {
         props.put("mail.smtp.auth", "true");
         props.put("mail.smtp.connectiontimeout", "10000");
         props.put("mail.smtp.timeout", "20000");
-        if (account.smtpPort() == 465) {
+        if (account.smtpHost().equalsIgnoreCase("localhost") || account.smtpHost().equals("127.0.0.1")) {
+            // Classroom loopback server does not use TLS; never use this mode over a network.
+            props.put("mail.smtp.starttls.enable", "false");
+        } else if (account.smtpPort() == 465) {
             props.put("mail.smtp.ssl.enable", "true");
         } else {
             props.put("mail.smtp.starttls.enable", "true");
