@@ -59,6 +59,27 @@ public final class MailDatabase {
         if (!enabled()) return;
         try (Connection c = connect()) {
             long id = accountId(c, account);
+            // POP3 refresh must not append a second copy of the same received message.
+            // Message-ID is the primary identity; older mail without it uses a content match.
+            if ("RECEIVED".equals(direction)) {
+                boolean hasId = item.messageId() != null && !item.messageId().isBlank();
+                String sql = hasId
+                        ? "SELECT 1 FROM mail_messages WHERE account_id=? AND direction='RECEIVED' AND message_id=? LIMIT 1"
+                        : "SELECT 1 FROM mail_messages WHERE account_id=? AND direction='RECEIVED' AND (message_id IS NULL OR message_id='') AND sender <=> ? AND recipients <=> ? AND subject <=> ? AND body <=> ? LIMIT 1";
+                try (PreparedStatement check = c.prepareStatement(sql)) {
+                    check.setLong(1, id);
+                    if (hasId) check.setString(2, item.messageId());
+                    else {
+                        check.setString(2, item.from());
+                        check.setString(3, item.to());
+                        check.setString(4, item.subject());
+                        check.setString(5, item.body());
+                    }
+                    try (ResultSet existing = check.executeQuery()) {
+                        if (existing.next()) return;
+                    }
+                }
+            }
             try (PreparedStatement s = c.prepareStatement(
                     "INSERT INTO mail_messages(account_id,direction,message_id,sender,recipients,subject,body) VALUES(?,?,?,?,?,?,?)")) {
                 s.setLong(1, id); s.setString(2, direction); s.setString(3, item.messageId());
