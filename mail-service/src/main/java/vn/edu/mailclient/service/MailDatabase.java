@@ -76,7 +76,19 @@ public final class MailDatabase {
                         check.setString(5, item.body());
                     }
                     try (ResultSet existing = check.executeQuery()) {
-                        if (existing.next()) return;
+                        if (existing.next()) {
+                            if (hasId && item.body() != null && !item.body().isBlank()) {
+                                try (PreparedStatement update = c.prepareStatement(
+                                        "UPDATE mail_messages SET body=? WHERE account_id=? AND direction='RECEIVED' " +
+                                        "AND message_id=? AND (body IS NULL OR body='')")) {
+                                    update.setString(1, item.body());
+                                    update.setLong(2, id);
+                                    update.setString(3, item.messageId());
+                                    update.executeUpdate();
+                                }
+                            }
+                            return;
+                        }
                     }
                 }
             }
