@@ -42,7 +42,8 @@ public final class ImapService {
                 Date date = m.getReceivedDate() != null ? m.getReceivedDate() : m.getSentDate();
                 items.add(new MailItem(n, ids == null || ids.length == 0 ? "" : ids[0],
                     addresses(from), addresses(to), decode(m.getSubject()),
-                    text(m), date == null ? "" : date.toString()));
+                    text(m), m.getSentDate() == null ? "" : m.getSentDate().toInstant().toString(),
+                    m.getReceivedDate() == null ? "" : m.getReceivedDate().toInstant().toString()));
             }
             return items;
         } finally {
