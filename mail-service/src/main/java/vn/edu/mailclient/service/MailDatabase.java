@@ -1,6 +1,7 @@
 package vn.edu.mailclient.service;
 
 import java.sql.*;
+import java.util.List;
 import vn.edu.mailclient.common.MailAccount;
 import vn.edu.mailclient.common.MailItem;
 
@@ -39,7 +40,23 @@ public final class MailDatabase {
     private final String pass = setting("MAIL_DB_PASSWORD", setting("MYSQL_PASSWORD", ""));
     public boolean enabled() { return url != null && !url.isBlank(); }
     private Connection connect() throws SQLException {
-        return DriverManager.getConnection(url, user == null ? "" : user, pass == null ? "" : pass);
+        java.util.Properties properties = new java.util.Properties();
+        properties.setProperty("user", user == null ? "" : user);
+        properties.setProperty("password", pass == null ? "" : pass);
+        properties.setProperty("connectTimeout", "1500");
+        properties.setProperty("socketTimeout", "2000");
+        return DriverManager.getConnection(url, properties);
+    }
+
+    public String cachedBody(MailAccount account, String messageId) throws SQLException {
+        if (!enabled() || messageId == null || messageId.isBlank()) return null;
+        try (Connection c = connect(); PreparedStatement s = c.prepareStatement(
+                "SELECT m.body FROM mail_messages m JOIN mail_accounts a ON a.id=m.account_id " +
+                "WHERE a.email=? AND m.direction='RECEIVED' AND m.message_id=? AND m.body IS NOT NULL AND m.body<>'' LIMIT 1")) {
+            s.setQueryTimeout(2);
+            s.setString(1, account.email()); s.setString(2, messageId);
+            try (ResultSet rs = s.executeQuery()) { return rs.next() ? rs.getString(1) : null; }
+        }
     }
     private long accountId(Connection c, MailAccount account) throws SQLException {
         try (PreparedStatement s = c.prepareStatement(
@@ -82,8 +99,31 @@ public final class MailDatabase {
     public void save(MailAccount account, String direction, MailItem item) throws SQLException {
         if (!enabled()) return;
         try (Connection c = connect()) {
-            long id = accountId(c, account);
             ensureReceivedColumn(c);
+            save(c, accountId(c, account), direction, item);
+        }
+    }
+
+    /** Saves one synchronization batch with a single JDBC connection and transaction. */
+    public void saveAll(MailAccount account, String direction, List<MailItem> items) throws SQLException {
+        if (!enabled() || items == null || items.isEmpty()) return;
+        try (Connection c = connect()) {
+            c.setAutoCommit(false);
+            try {
+                long id = accountId(c, account);
+                ensureReceivedColumn(c);
+                for (MailItem item : items) save(c, id, direction, item);
+                c.commit();
+            } catch (SQLException ex) {
+                try { c.rollback(); } catch (SQLException ignored) {}
+                throw ex;
+            } finally {
+                try { c.setAutoCommit(true); } catch (SQLException ignored) {}
+            }
+        }
+    }
+
+    private void save(Connection c, long id, String direction, MailItem item) throws SQLException {
             // POP3 refresh must not append a second copy of the same received message.
             // Message-ID is the primary identity; older mail without it uses a content match.
             if ("RECEIVED".equals(direction)) {
@@ -149,7 +189,6 @@ public final class MailDatabase {
                 if (received == null) s.setNull(9, Types.TIMESTAMP); else s.setTimestamp(9, received);
                 s.executeUpdate();
             }
-        }
     }
     /** Store drafts independently of SMTP SENT/RECEIVED history. */
     public void saveDraft(MailAccount account, String draftId, String recipient, String subject, String body) throws SQLException {

@@ -14,6 +14,54 @@ import vn.edu.mailclient.common.MailItem;
 
 /** Gmail IMAP inbox; POP3 remains available independently for lab demonstration. */
 public final class ImapService {
+    private Store bodyStore;
+    private Folder bodyFolder;
+    private String bodyAccount;
+
+    /** Reuse a read-only connection; identify mail by Message-ID after expunges. */
+    public synchronized String body(MailAccount account, MailItem item) throws MessagingException, IOException {
+        for (int attempt = 0; attempt < 2; attempt++) {
+            try {
+                if (bodyStore == null || !bodyStore.isConnected() || bodyFolder == null
+                        || !bodyFolder.isOpen() || !account.email().equals(bodyAccount)) {
+                    closeBodyConnection();
+                    Properties p = new Properties();
+                    p.put("mail.imaps.ssl.enable", "true");
+                    p.put("mail.imaps.connectiontimeout", "8000");
+                    p.put("mail.imaps.timeout", "12000");
+                    p.put("mail.imaps.writetimeout", "12000");
+                    p.put("mail.imaps.fetchsize", "262144");
+                    p.put("mail.imaps.peek", "true");
+                    bodyStore = Session.getInstance(p).getStore("imaps");
+                    bodyStore.connect("imap.gmail.com", account.email(), account.password().replaceAll("\\s", ""));
+                    bodyFolder = bodyStore.getFolder("INBOX");
+                    bodyFolder.open(Folder.READ_ONLY);
+                    bodyAccount = account.email();
+                }
+                Message message = item.number() > 0 && item.number() <= bodyFolder.getMessageCount()
+                    ? bodyFolder.getMessage(item.number()) : null;
+                if (!item.messageId().isBlank()) {
+                    String[] ids = message == null ? null : message.getHeader("Message-ID");
+                    if (ids == null || ids.length == 0 || !item.messageId().equals(ids[0])) {
+                        Message[] matches = bodyFolder.search(new javax.mail.search.MessageIDTerm(item.messageId()));
+                        message = matches.length == 0 ? null : matches[0];
+                    }
+                }
+                if (message == null) throw new MessagingException("Message not found");
+                return text(message);
+            } catch (FolderClosedException | StoreClosedException ex) {
+                closeBodyConnection();
+                if (attempt == 1) throw ex;
+            }
+        }
+        throw new MessagingException("Cannot read message");
+    }
+
+    public synchronized void closeBodyConnection() {
+        if (bodyFolder != null && bodyFolder.isOpen()) try { bodyFolder.close(false); } catch (MessagingException ignored) {}
+        if (bodyStore != null) try { bodyStore.close(); } catch (MessagingException ignored) {}
+        bodyFolder = null; bodyStore = null; bodyAccount = null;
+    }
     public List<MailItem> inbox(MailAccount account, int offset, int pageSize) throws MessagingException, IOException {
         Properties p = new Properties();
         p.put("mail.store.protocol", "imaps");
@@ -33,13 +81,19 @@ public final class ImapService {
             int upper = count - Math.max(0, offset);
             if (upper < 1) return List.of();
             int lower = Math.max(1, upper - Math.max(1, Math.min(50, pageSize)) + 1);
+            Message[] page = folder.getMessages(lower, upper);
+            FetchProfile profile = new FetchProfile();
+            profile.add(FetchProfile.Item.ENVELOPE);
+            profile.add(FetchProfile.Item.CONTENT_INFO);
+            profile.add("Message-ID");
+            folder.fetch(page, profile);
             List<MailItem> items = new ArrayList<>();
-            for (int n = upper; n >= lower; n--) {
-                Message m = folder.getMessage(n);
+            for (int i = page.length - 1; i >= 0; i--) {
+                Message m = page[i];
                 Address[] from = m.getFrom();
                 Address[] to = m.getRecipients(Message.RecipientType.TO);
                 String[] ids = m.getHeader("Message-ID");
-                items.add(new MailItem(n, ids == null || ids.length == 0 ? "" : ids[0],
+                items.add(new MailItem(m.getMessageNumber(), ids == null || ids.length == 0 ? "" : ids[0],
                     addresses(from), addresses(to), decode(m.getSubject()),
                     "", m.getSentDate() == null ? "" : m.getSentDate().toInstant().toString(),
                     m.getReceivedDate() == null ? "" : m.getReceivedDate().toInstant().toString()));
@@ -69,6 +123,12 @@ public final class ImapService {
             long start = Math.max(1, Math.max(lastUid + 1, max - Math.max(1, Math.min(limit, 100)) + 1));
             if (start > max) return new SyncBatch(lastUid, List.of());
             Message[] messages = uids.getMessagesByUID(start, max);
+            FetchProfile profile = new FetchProfile();
+            profile.add(FetchProfile.Item.ENVELOPE);
+            profile.add(FetchProfile.Item.CONTENT_INFO);
+            profile.add(UIDFolder.FetchProfileItem.UID);
+            profile.add("Message-ID");
+            folder.fetch(messages, profile);
             List<MailItem> items = new ArrayList<>();
             long cursor = lastUid;
             for (Message m : messages) {
