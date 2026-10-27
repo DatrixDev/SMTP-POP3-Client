@@ -73,7 +73,7 @@ public final class MailFxApp extends Application {
     private Timeline imapPolling;
     private boolean imapSyncBusy = false;
     private int inboxOffset = 0;
-    private final ComboBox<String> receiveMode = new ComboBox<>(FXCollections.observableArrayList("POP3 (bài lab)", "IMAP (thư mới)"));
+    private final ComboBox<String> receiveMode = new ComboBox<>(FXCollections.observableArrayList("IMAP (Gmail - nhanh)", "POP3 (bài lab)"));
     private static final int PAGE_SIZE = 20;
     private final Label pageLabel = new Label("Trang 1");
 
@@ -92,10 +92,11 @@ public final class MailFxApp extends Application {
         Scene scene = new Scene(root, 1280, 800);
         stage.setScene(scene);
         stage.setMinWidth(980); stage.setMinHeight(640);
-        stage.setTitle("SMTP / POP3 Mail • JavaFX");
+        stage.setTitle("Mail Client • Gmail IMAP / SMTP");
+        receiveMode.getSelectionModel().selectFirst();
         showPage(cfg.email().isBlank() || cfg.password().isBlank() ? "settings" : "inbox");
         stage.show();
-        imapPolling = new Timeline(new KeyFrame(Duration.seconds(45), e -> pollImap()));
+        imapPolling = new Timeline(new KeyFrame(Duration.seconds(7), e -> pollImap()));
         imapPolling.setCycleCount(Timeline.INDEFINITE);
         imapPolling.play();
     }
@@ -527,7 +528,49 @@ public final class MailFxApp extends Application {
         TextArea body=(TextArea)card.getChildren().get(5);
         to.setText(recipient);sub.setText(subject);body.setText(content);
     }
-    private Pane sentPage() {return localFolderPage("sent","Đã gửi");}
+    private Pane sentPage() {
+        if (popHost.getText().trim().equalsIgnoreCase("127.0.0.1")
+                || popHost.getText().trim().equalsIgnoreCase("localhost")) return localFolderPage("sent", "Đã gửi");
+        VBox wrapper = new VBox(12);
+        wrapper.setPadding(new Insets(18, 24, 18, 24));
+        VBox heading = page("Đã gửi", "Đồng bộ thư đã gửi trực tiếp từ Gmail bằng IMAP");
+        VBox entries = new VBox(2);
+        entries.getChildren().add(new Label("Đang tải Gmail Sent Mail..."));
+        ScrollPane scroll = new ScrollPane(entries);
+        scroll.setFitToWidth(true);
+        VBox.setVgrow(scroll, Priority.ALWAYS);
+        Button reload = primary("↻ Đồng bộ thư đã gửi");
+        reload.setOnAction(e -> loadImapSent(entries));
+        Button legacy = new Button("Thư đã gửi lưu trên máy");
+        legacy.setOnAction(e -> root.setCenter(localFolderPage("sent", "Đã gửi trên máy")));
+        wrapper.getChildren().addAll(heading, new HBox(12, reload, legacy), scroll);
+        loadImapSent(entries);
+        return wrapper;
+    }
+    private void loadImapSent(VBox entries) {
+        final MailAccount acc;
+        try { acc = account(); } catch (Exception ex) { entries.getChildren().setAll(new Label(ex.getMessage())); return; }
+        entries.getChildren().setAll(new Label("Đang đồng bộ thư đã gửi..."));
+        Task<List<MailItem>> task = new Task<>() {
+            @Override protected List<MailItem> call() throws Exception {
+                return new ImapService().sent(acc, 0, 50);
+            }
+        };
+        task.setOnSucceeded(e -> {
+            entries.getChildren().clear();
+            for (MailItem item : task.getValue()) {
+                Button row = new Button("➤  " + item.to() + "   •   " + item.subject());
+                row.setMaxWidth(Double.MAX_VALUE);
+                row.setAlignment(Pos.CENTER_LEFT);
+                row.setStyle("-fx-background-color: white; -fx-padding: 16; -fx-font-size: 14px;");
+                row.setOnAction(ev -> showMessageDialog(item));
+                entries.getChildren().add(row);
+            }
+            if (task.getValue().isEmpty()) entries.getChildren().add(new Label("Chưa có thư đã gửi."));
+        });
+        task.setOnFailed(e -> entries.getChildren().setAll(new Label("Không đồng bộ được: " + task.getException().getMessage())));
+        workers.submit(task);
+    }
     private Pane draftsPage() {return localFolderPage("draft","Thư nháp");}
     private void refreshInbox(Button refresh) {
         final MailAccount acc;
@@ -573,6 +616,7 @@ public final class MailFxApp extends Application {
     private void pollImap() {
         if (imapSyncBusy || receiveMode.getValue() == null || !receiveMode.getValue().startsWith("IMAP")) return;
         if (root.getCenter() == null || !root.getCenter().getClass().equals(VBox.class)) return;
+        if (popHost.getText().trim().equalsIgnoreCase("127.0.0.1") || popHost.getText().trim().equalsIgnoreCase("localhost")) return;
         final MailAccount acc;
         try { acc = account(); } catch (Exception ignored) { return; }
         final String key = "imap.uid." + acc.email().toLowerCase(java.util.Locale.ROOT);
@@ -586,6 +630,13 @@ public final class MailFxApp extends Application {
         task.setOnSucceeded(e -> {
             imapSyncBusy = false;
             ImapService.SyncBatch batch = task.getValue();
+            if (!batch.messages().isEmpty()) cacheWorkers.submit(() -> {
+                MailDatabase db = new MailDatabase();
+                for (MailItem item : batch.messages()) {
+                    try { db.save(acc, "RECEIVED", item); }
+                    catch (Exception ex) { System.err.println("IMAP cache: " + ex.getMessage()); break; }
+                }
+            });
             if (batch.lastUid() > previous) syncState.putLong(key, batch.lastUid());
             if (!batch.messages().isEmpty()) {
                 status.setText("IMAP: có " + batch.messages().size() + " thư mới");
@@ -839,5 +890,5 @@ public final class MailFxApp extends Application {
         new Alert(Alert.AlertType.ERROR, cause.getMessage() == null ? cause.toString() : cause.getMessage()).showAndWait();
     }
 
-    @Override public void stop() { if (imapPolling != null) imapPolling.stop(); workers.shutdownNow(); }
+    @Override public void stop() { if (imapPolling != null) imapPolling.stop(); workers.shutdownNow(); cacheWorkers.shutdownNow(); }
 }
