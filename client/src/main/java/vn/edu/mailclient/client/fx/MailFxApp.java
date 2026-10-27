@@ -69,6 +69,8 @@ public final class MailFxApp extends Application {
     private String lanToken;
     private String lanUser;
     private Stage stage;
+    private final java.util.Map<String, MailAccount> sessionAccounts = new java.util.LinkedHashMap<>();
+    private final ComboBox<String> accountSwitcher = new ComboBox<>();
     private final Preferences syncState = Preferences.userNodeForPackage(MailFxApp.class);
     private Timeline imapPolling;
     private boolean imapSyncBusy = false;
@@ -84,11 +86,16 @@ public final class MailFxApp extends Application {
         smtpHost.setText(cfg.smtpHost()); smtpPort.setText(String.valueOf(cfg.smtpPort()));
         popHost.setText(cfg.popHost()); popPort.setText(String.valueOf(cfg.popPort()));
         accountLabel.setText(cfg.email().isBlank() ? "Chưa cấu hình tài khoản" : cfg.email());
+        if (!cfg.email().isBlank() && !cfg.password().isBlank()) {
+            sessionAccounts.put(cfg.email(), new MailAccount(cfg.email(), cfg.password(), cfg.smtpHost(), cfg.smtpPort(), cfg.popHost(), cfg.popPort()));
+            accountSwitcher.getItems().add(cfg.email());
+            accountSwitcher.setValue(cfg.email());
+        }
 
         root.setTop(header());
         root.setLeft(sidebar());
         root.setBottom(footer());
-        root.setStyle("-fx-background-color: #f6f8fc;");
+        root.setStyle("-fx-background-color: #f7f9fd;");
         Scene scene = new Scene(root, 1280, 800);
         stage.setScene(scene);
         stage.setMinWidth(980); stage.setMinHeight(640);
@@ -103,7 +110,7 @@ public final class MailFxApp extends Application {
 
     private HBox header() {
         Label menu = new Label("☰");menu.setStyle("-fx-font-size: 21px; -fx-text-fill: #5f6368;");
-        Label logo = new Label("✉ Mail");logo.setFont(Font.font("System",FontWeight.NORMAL,25));
+        Label logo = new Label("✉  MailSpace");logo.setFont(Font.font("System",FontWeight.BOLD,25));
         logo.setTextFill(Color.web("#202124"));
         searchField.setPromptText("⌕   Tìm kiếm trong thư");
         searchField.setPrefWidth(360);searchField.setMaxWidth(580);searchField.setPrefHeight(46);
@@ -113,9 +120,29 @@ public final class MailFxApp extends Application {
         Region expand = new Region();HBox.setHgrow(expand,Priority.ALWAYS);
         Button settings=iconButton("⚙","Cấu hình SMTP / POP3");settings.setOnAction(e->showPage("settings"));
         accountLabel.setTextFill(Color.web("#5f6368"));
-        HBox h=new HBox(16,menu,logo,searchField,expand,settings,accountLabel);
+        accountSwitcher.setPromptText("Chọn tài khoản");
+        accountSwitcher.setPrefWidth(205);
+        accountSwitcher.setOnAction(e -> {
+            String selected = accountSwitcher.getValue();
+            MailAccount acc = sessionAccounts.get(selected);
+            if (acc == null || selected.equals(email.getText().trim())) return;
+            email.setText(acc.email()); password.setText(acc.password());
+            smtpHost.setText(acc.smtpHost()); smtpPort.setText(String.valueOf(acc.smtpPort()));
+            popHost.setText(acc.popHost()); popPort.setText(String.valueOf(acc.popPort()));
+            accountLabel.setText(acc.email());
+            inboxOffset = 0; allInbox.clear(); popBodyCache.clear();
+            showPage("inbox");
+        });
+        Button addAccount = iconButton("＋", "Thêm tài khoản Gmail");
+        addAccount.setOnAction(e -> {
+            email.clear(); password.clear(); accountLabel.setText("Thêm tài khoản");
+            smtpHost.setText("smtp.gmail.com"); smtpPort.setText("587");
+            popHost.setText("imap.gmail.com"); popPort.setText("993");
+            showPage("settings");
+        });
+        HBox h=new HBox(16,menu,logo,searchField,expand,settings,accountSwitcher,addAccount);
         h.setAlignment(Pos.CENTER_LEFT);h.setPadding(new Insets(10,24,10,18));
-        h.setStyle("-fx-background-color: #f6f8fc;");
+        h.setStyle("-fx-background-color: white; -fx-border-color: #e7edf6; -fx-border-width: 0 0 1 0;");
         return h;
     }
 
@@ -132,10 +159,10 @@ public final class MailFxApp extends Application {
         categoriesNav=nav("⌄    Danh mục","categories");
         lanNav=nav("◉    Mail nội bộ LAN","lan");
         settingsNav=nav("⚙    Cài đặt SMTP / POP3","settings");
-        Label folders=new Label("Nhãn");folders.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #444746;");
+        Label folders=new Label("KHÔNG GIAN LÀM VIỆC");folders.setStyle("-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #444746;");
         VBox side=new VBox(8,composeNav,inboxNav,starredNav,sentNav,draftNav,categoriesNav,new Separator(),folders,lanNav,settingsNav);
         side.setPadding(new Insets(10,10,10,10));side.setPrefWidth(225);side.setMinWidth(205);
-        side.setStyle("-fx-background-color: #f6f8fc;");
+        side.setStyle("-fx-background-color: #f0f4fb; -fx-border-color: #e3e9f3; -fx-border-width: 0 1 0 0;");
         return side;
     }
     private Button nav(String label,String page) {
@@ -820,7 +847,7 @@ public final class MailFxApp extends Application {
         field(grid, "SMTP port", smtpPort, 1, 1);
         field(grid, "POP3 host", popHost, 0, 2);
         field(grid, "POP3 port", popPort, 1, 2);
-        Label hint = new Label("Gmail: SMTP 587 (STARTTLS), POP3 995 (SSL).\n"
+        Label hint = new Label("Gmail: SMTP 587 (STARTTLS), IMAP 993 (SSL).\n"
                 + "Thay đổi tại đây chỉ áp dụng đến khi đóng ứng dụng.\n"
                 + "Muốn lưu cho lần chạy sau, hãy sửa .env ở thư mục gốc.");
         hint.setTextFill(Color.web("#687b97"));
@@ -838,7 +865,12 @@ public final class MailFxApp extends Application {
         });
         Button apply = primary("✓  Áp dụng");
         apply.setOnAction(e -> {
-            try { MailAccount acc = account(); accountLabel.setText(acc.email()); showPage("inbox"); }
+            try { MailAccount acc = account(); accountLabel.setText(acc.email());
+                sessionAccounts.put(acc.email(), acc);
+                if (!accountSwitcher.getItems().contains(acc.email())) accountSwitcher.getItems().add(acc.email());
+                accountSwitcher.setValue(acc.email());
+                inboxOffset = 0; allInbox.clear(); popBodyCache.clear();
+                showPage("inbox"); }
             catch (Exception ex) { error(ex); }
         });
         VBox card = new VBox(25, new HBox(12, localPreset, gmailPreset), grid, hint, apply);
