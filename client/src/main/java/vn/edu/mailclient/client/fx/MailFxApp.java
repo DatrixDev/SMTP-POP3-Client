@@ -357,13 +357,14 @@ public final class MailFxApp extends Application {
         detailBody.setText(cached != null ? cached : item.body());
         boolean pop3 = receiveMode.getValue() == null || !receiveMode.getValue().startsWith("IMAP");
         long request = ++bodyRequestSequence;
-        if (pop3 && cached == null && item.body().isBlank()) {
+        if (cached == null && item.body().isBlank()) {
             detailBody.setText("Đang tải nội dung thư...");
             final MailAccount acc;
             try { acc = account(); } catch (Exception ex) { detailBody.setText(ex.getMessage()); return; }
             Task<String> task = new Task<>() {
                 @Override protected String call() throws Exception {
-                    return new Pop3Service().body(acc, item.number());
+                    return pop3 ? new Pop3Service().body(acc, item.number())
+                                : new ImapService().body(acc, item.number());
                 }
             };
             task.setOnSucceeded(e -> {
