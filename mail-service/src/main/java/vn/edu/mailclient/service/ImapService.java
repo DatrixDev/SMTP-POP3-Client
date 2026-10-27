@@ -41,7 +41,7 @@ public final class ImapService {
                 String[] ids = m.getHeader("Message-ID");
                 items.add(new MailItem(n, ids == null || ids.length == 0 ? "" : ids[0],
                     addresses(from), addresses(to), decode(m.getSubject()),
-                    text(m), m.getSentDate() == null ? "" : m.getSentDate().toInstant().toString(),
+                    "", m.getSentDate() == null ? "" : m.getSentDate().toInstant().toString(),
                     m.getReceivedDate() == null ? "" : m.getReceivedDate().toInstant().toString()));
             }
             return items;
@@ -80,7 +80,7 @@ public final class ImapService {
                 String[] ids = m.getHeader("Message-ID");
                 Date date = m.getReceivedDate() != null ? m.getReceivedDate() : m.getSentDate();
                 items.add(new MailItem(m.getMessageNumber(), ids == null || ids.length == 0 ? "" : ids[0],
-                    addresses(from), addresses(to), decode(m.getSubject()), text(m),
+                    addresses(from), addresses(to), decode(m.getSubject()), "",
                     m.getSentDate() == null ? "" : m.getSentDate().toInstant().toString(),
                     m.getReceivedDate() == null ? "" : m.getReceivedDate().toInstant().toString()));
             }
@@ -90,6 +90,27 @@ public final class ImapService {
             try { store.close(); } catch (MessagingException ignored) {}
         }
     }
+    /** Fetch a single IMAP body on demand to keep inbox and UID sync fast. */
+    public String body(MailAccount account, int messageNumber) throws MessagingException, IOException {
+        Properties p = new Properties();
+        p.put("mail.store.protocol", "imaps");
+        p.put("mail.imaps.ssl.enable", "true");
+        p.put("mail.imaps.connectiontimeout", "12000");
+        p.put("mail.imaps.timeout", "20000");
+        Store store = Session.getInstance(p).getStore("imaps");
+        Folder folder = null;
+        try {
+            store.connect("imap.gmail.com", account.email(), account.password().replaceAll("\\s", ""));
+            folder = store.getFolder("INBOX");
+            folder.open(Folder.READ_ONLY);
+            if (messageNumber < 1 || messageNumber > folder.getMessageCount()) throw new MessagingException("Message not found");
+            return text(folder.getMessage(messageNumber));
+        } finally {
+            if (folder != null && folder.isOpen()) try { folder.close(false); } catch (MessagingException ignored) {}
+            try { store.close(); } catch (MessagingException ignored) {}
+        }
+    }
+
     public List<MailItem> sent(MailAccount account, int offset, int pageSize) throws MessagingException, IOException {
         Properties p = new Properties();
         p.put("mail.store.protocol", "imaps");
