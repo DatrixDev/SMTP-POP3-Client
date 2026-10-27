@@ -39,7 +39,6 @@ public final class ImapService {
                 Address[] from = m.getFrom();
                 Address[] to = m.getRecipients(Message.RecipientType.TO);
                 String[] ids = m.getHeader("Message-ID");
-                Date date = m.getReceivedDate() != null ? m.getReceivedDate() : m.getSentDate();
                 items.add(new MailItem(n, ids == null || ids.length == 0 ? "" : ids[0],
                     addresses(from), addresses(to), decode(m.getSubject()),
                     text(m), m.getSentDate() == null ? "" : m.getSentDate().toInstant().toString(),
@@ -82,9 +81,42 @@ public final class ImapService {
                 Date date = m.getReceivedDate() != null ? m.getReceivedDate() : m.getSentDate();
                 items.add(new MailItem(m.getMessageNumber(), ids == null || ids.length == 0 ? "" : ids[0],
                     addresses(from), addresses(to), decode(m.getSubject()), text(m),
-                    date == null ? "" : date.toString()));
+                    m.getSentDate() == null ? "" : m.getSentDate().toInstant().toString(),
+                    m.getReceivedDate() == null ? "" : m.getReceivedDate().toInstant().toString()));
             }
             return new SyncBatch(cursor, items);
+        } finally {
+            if (folder != null && folder.isOpen()) try { folder.close(false); } catch (MessagingException ignored) {}
+            try { store.close(); } catch (MessagingException ignored) {}
+        }
+    }
+    public List<MailItem> sent(MailAccount account, int offset, int pageSize) throws MessagingException, IOException {
+        Properties p = new Properties();
+        p.put("mail.store.protocol", "imaps");
+        p.put("mail.imaps.ssl.enable", "true");
+        p.put("mail.imaps.connectiontimeout", "12000");
+        p.put("mail.imaps.timeout", "20000");
+        Store store = Session.getInstance(p).getStore("imaps");
+        Folder folder = null;
+        try {
+            store.connect("imap.gmail.com", account.email(), account.password().replaceAll("\\s", ""));
+            folder = store.getFolder("[Gmail]/Sent Mail");
+            if (!folder.exists()) folder = store.getFolder("[Gmail]/Thư đã gửi");
+            if (!folder.exists()) throw new MessagingException("Gmail Sent folder unavailable");
+            folder.open(Folder.READ_ONLY);
+            int upper = folder.getMessageCount() - Math.max(0, offset);
+            if (upper < 1) return List.of();
+            int lower = Math.max(1, upper - Math.max(1, Math.min(50, pageSize)) + 1);
+            List<MailItem> items = new ArrayList<>();
+            for (int n = upper; n >= lower; n--) {
+                Message m = folder.getMessage(n);
+                String[] ids = m.getHeader("Message-ID");
+                items.add(new MailItem(n, ids == null || ids.length == 0 ? "" : ids[0],
+                    addresses(m.getFrom()), addresses(m.getAllRecipients()), decode(m.getSubject()), text(m),
+                    m.getSentDate() == null ? "" : m.getSentDate().toInstant().toString(),
+                    m.getReceivedDate() == null ? "" : m.getReceivedDate().toInstant().toString()));
+            }
+            return items;
         } finally {
             if (folder != null && folder.isOpen()) try { folder.close(false); } catch (MessagingException ignored) {}
             try { store.close(); } catch (MessagingException ignored) {}
