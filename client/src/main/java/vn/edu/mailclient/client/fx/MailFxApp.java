@@ -337,8 +337,14 @@ public final class MailFxApp extends Application {
         split.setDividerPositions(0.50);
         split.setStyle("-fx-background-color: white; -fx-box-border: transparent;");
         VBox.setVgrow(split,Priority.ALWAYS);
-        VBox container = new VBox(toolbar,split);
-        container.setStyle("-fx-background-color: white; -fx-background-radius: 16 16 0 0;");
+        Label homeTitle = new Label("Hộp thư của bạn");
+        homeTitle.setStyle("-fx-font-size: 23px; -fx-font-weight: bold; -fx-text-fill: #183153;");
+        Label homeSubtitle = new Label("Gmail IMAP • đồng bộ thư mới tự động mỗi 7 giây");
+        homeSubtitle.setStyle("-fx-font-size: 12px; -fx-text-fill: #667a95;");
+        VBox homeHeading = new VBox(5, homeTitle, homeSubtitle);
+        homeHeading.setPadding(new Insets(18, 20, 12, 20));
+        VBox container = new VBox(homeHeading, toolbar, split);
+        container.setStyle("-fx-background-color: white; -fx-background-radius: 18; -fx-border-color: #e4ebf5; -fx-border-radius: 18;");
         VBox.setVgrow(container,Priority.ALWAYS);
         VBox outer = new VBox(container);outer.setPadding(new Insets(0,16,10,0));
         VBox.setVgrow(container,Priority.ALWAYS);
